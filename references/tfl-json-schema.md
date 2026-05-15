@@ -1,0 +1,351 @@
+---
+purpose: .tfl / .tflx ファイル構造と flow.json のスキーマリファレンス
+sources:
+  - https://help.tableau.com/current/prep/en-us/prep_save_share.htm
+fetched_at: 2026-05-17
+source_last_known_update: 不明（公式は包括的スキーマ docs を公開していないため実例ベースで埋めている）
+note: ファイル形式 (zip + flow + .hyper)、トップレベル JSON 構造、依存関係の罠、新規 .tfl 組み立てパターン、SuperTransform を actions 単位で分割する実装手順を含む
+---
+
+# tfl-json-schema
+
+`.tfl` / `.tflx` ファイルの構造リファレンス。**prep-extractor** が flow.json を読むとき、**prep-builder** が新規 .tfl を組み立てるときに参照する。
+
+⚠️ 一般的な情報ベース。Tableau Prep バージョン間で構造が変わる可能性があるため、**実 .tfl サンプルで検証してから利用すること**。公式の包括的スキーマドキュメントは存在しない。
+
+## ファイル形式
+
+| 拡張子 | 中身 |
+|---|---|
+| `.tfl` | **zip アーカイブ**。複数 entry を含む (詳細は次節) |
+| `.tflx` | **zip アーカイブ**。`.tfl` の内容 ＋ 抽出データ (`.hyper`) |
+
+中身を取り出す:
+
+```python
+import zipfile, json
+with zipfile.ZipFile("flow.tflx") as z:
+    with z.open("flow") as f:
+        flow_def = json.load(f)
+```
+
+Repo 直下 [scripts/flow_io.py](../scripts/flow_io.py) に展開・パック用の共通ヘルパあり。
+
+### `.tfl` の zip 内 entry (詳細)
+
+Prep Builder が保存する .tfl は **マルチエントリ zip**。最低限以下を含む:
+
+| entry | 必須か | 役割 |
+|---|---|---|
+| `flow` | ✅ 常に必須 | フロー定義 JSON |
+| `maestroMetadata` | ✅ **publish に必須** | Tableau Prep (社内コードネーム "Maestro") のメタデータ。これが無いと Server publish が `errorCode=280003 "Problem reading the provided Flow file"` で拒否、Prep CLI ロードも `InvalidMaestroDocumentMetadataNotFoundMsg` で失敗 |
+| `displaySettings` | 推奨 | UI レイアウト・pane 状態。無くても publish は通るが Prep Builder で開くと初期表示が崩れる |
+| `flowGraphImage.png` | 不要 | Prep Builder UI 上のプレビュー画像 (生成元 DAG と整合しない場合は同梱しない方が安全) |
+| `flowGraphThumbnail.svg` | 不要 | 同上のサムネ |
+
+**ビルダー実装上の規約**: 新規 .tfl を組み立てる場合、`maestroMetadata` を **元 .tfl からそのままコピーして** 同梱すること。空 .tfl や `flow` だけの .tfl は publish 不能。`scripts/flow_io.py` の `pack_flow_json(..., aux_entries={...})` と `load_aux_entries(...)` および定数 `PUBLISHABLE_AUX_ENTRIES` がこの規約を支える。
+
+⚠️ `maestroMetadata` は元フロー全体のメタなので、新 .tfl の DAG が元の部分集合のとき **内部に存在しないノード ID への参照を含む可能性がある**。publish は通っても、Prep Builder GUI で開いた時 / Cloud で run した時に不整合が露見するリスクは残る (現時点で未検証、要 Phase 2)。
+
+## トップレベル JSON 構造（典型）
+
+```json
+{
+  "name": "My Flow",
+  "version": "...",
+  "loomVersion": "...",
+  "nodes": { "<node-uuid>": { ... }, ... },
+  "connections": { "<connection-id>": { ... }, ... },
+  "connectionsAttributes": [...],
+  "initialNodes": [ "<entry-node-uuid>", ... ]
+}
+```
+
+| キー | 役割 |
+|---|---|
+| `nodes` | 各ステップ（Input / Clean / Join / Aggregate / Output 等）の定義辞書 |
+| `connections` | データソース接続定義（DB ホスト、テーブル名等） |
+| `connectionsAttributes` | 接続の付帯情報 |
+| `initialNodes` | エントリーポイント（依存のない先頭ノード）の UUID 配列 |
+| `name`, `version`, `loomVersion` | メタ情報 |
+
+## ノード種別（代表例）
+
+⚠️ `Filter` / `Rename` / `AddColumn` などは **トップレベル nodeType ではなく、SuperTransform 内部の actions サブタイプ**。UI ステップとの対応マップは [prep-ui-to-json-mapping.md](prep-ui-to-json-mapping.md) を参照。
+
+トップレベル `nodeType`（末尾だけ示す）:
+
+| nodeType | UI ステップ |
+|---|---|
+| `LoadSql` / `LoadSqlProxy` / `LoadHyper` / `LoadCsv` / `LoadExcel` | Input |
+| `SuperTransform` | Clean ステップ（内部に actions 配列） |
+| `SuperJoin` | Join |
+| `SuperUnion` | Union |
+| `SuperAggregate` | Aggregate |
+| `SuperNewRows` | New Rows（時系列補間等） |
+| `SuperPivot` | Pivot |
+| `Script` 系 | Python / R |
+| `WriteToHyper` / `WriteToDatabase` / `PublishExtract` | Output |
+
+`nodeType` には `.v<year>_<minor>_<patch>.<Type>` のバージョンプレフィクスが付く（例: `.v2018_2_3.SuperTransform`）。グルーピング時は **最後のドット以降** を使う。
+
+業務的解釈は本ファイルの範囲外:
+- レイヤ示唆: [layer-responsibilities.md](layer-responsibilities.md)
+
+## ノードの典型構造
+
+```json
+"<node-uuid>": {
+  "name": "<display name>",
+  "nodeType": "...v2018_2_3.SuperTransform",
+  "baseType": "...",
+  "nextNodes": [
+    {"nextNodeId": "<next-node-uuid>", ...}
+  ],
+  "previousNodes": [],
+  "beforeActionAnnotations": [
+    {"annotationNode": { "nodeType": "...RenameColumn", "columnName": "...", "rename": "..." }},
+    {"annotationNode": { "nodeType": "...AddColumn", "columnName": "...", "expression": "..." }}
+  ]
+}
+```
+
+## ⚠️ 依存関係の表現（実地で見つけた重要事項）
+
+- **`previousNodes` は空配列が普通** — トポロジ復元には使えない。`nextNodes` から **逆引きで前段を求める**
+- **`nextNodes` の要素は dict**（文字列ではない）。`{"nextNodeId": "<uuid>"}` から取り出す
+- **トポロジカル順序** は `flow["initialNodes"]` から **BFS** で復元する:
+
+```python
+nodes = flow["nodes"]
+visited: list[str] = []
+queue = list(flow.get("initialNodes", []))
+while queue:
+    cur = queue.pop(0)
+    if cur in visited:
+        continue
+    visited.append(cur)
+    for nxt in nodes[cur].get("nextNodes", []):
+        nid_next = nxt.get("nextNodeId") if isinstance(nxt, dict) else nxt
+        if nid_next and nid_next not in visited and nid_next not in queue:
+            queue.append(nid_next)
+# visited が topological order。短 ID (#1, #2, ...) はこの順に採番
+```
+
+## SuperTransform 内部の actions
+
+- SuperTransform ノードの UI 上の操作（Rename / AddColumn / RemoveColumns / Filter / ChangeColumnType / ValueFilter 等）は **すべて `beforeActionAnnotations` 配列** に格納
+- 各要素は `{"annotationNode": {...}}` でラップ。**1 階下ろしてから** `nodeType` と各種フィールド（`columnName`, `rename`, `expression`, `columnNames` 等）にアクセス
+- `node.get("actions")` という見るからにそれっぽいフィールドは **空または存在しない**。罠
+- action の `nodeType` も version prefix 付き。末尾だけ見れば `RenameColumn` / `AddColumn` / `RemoveColumns` / `ChangeColumnType` / `ValueFilter` / `FilterOperation` 等
+
+## 新規 .tfl 組み立てパターン（prep-builder build 用）
+
+build フェーズが新規 .tfl を生成する際の頻出パターン:
+
+### 切れた依存を新 Input ノードに置換 (推奨: LoadSqlProxy + 上流 PDS)
+
+元 .tfl から一部ノードを切り出すと、外部依存になった前段を新規 Input ノードで置き換える。Tableau Cloud 上で stg → int → marts のレイヤ間を繋ぐには、**LoadSqlProxy で上流レイヤの Published Data Source を参照** する形にする ([prep-builder の build-recipe.md](../.claude/skills/prep-builder/references/build-recipe.md) B2 修正)。`LoadHyper` (ローカル `.hyper` 参照) は Tableau Cloud 上では下流から参照できないので不適。
+
+`LoadSqlProxy` ノードを 1 個入れる際には、必ず以下の 4 つも揃える (どれかが欠けると publish が `errorCode=280003` で拒否):
+
+1. **トップレベル `connections[<conn-id>]`** — Tableau Server 接続 (class=sqlproxy)
+2. **トップレベル `dataConnections[<dconn-id>]`** — その PDS への接続 (baseConnectionId が ↑ の conn-id を指す)
+3. **トップレベル `connectionIds` / `dataConnectionIds`** 配列に上記 id を追加
+4. **LoadSqlProxy ノードの `connectionId`** が **dataConnection の id** を指す (connection の id ではない)
+
+実装は [scripts/flow_io.py](../scripts/flow_io.py) の `register_server_connection` / `register_pds_data_connection` / `make_load_sql_proxy_node` ヘルパが面倒を見る。複数の LoadSqlProxy が同じ Server 接続を共有するよう、`register_server_connection` は (server_url, site_url_name) で dedup する (重複 Tableau Server 接続は KB 005232681 で同じ `errorCode=280003` を引く)。
+
+LoadSqlProxy ノードの典型構造:
+
+```json
+{
+  "nodeType": ".v2019_3_1.LoadSqlProxy",
+  "id": "<uuid>",
+  "name": "<datasourceName> (<projectName>)",
+  "baseType": "input",
+  "nextNodes": [{"namespace": "Default", "nextNodeId": "<next>", "nextNamespace": "Default"}],
+  "connectionId": "<dataConnection-uuid>",
+  "connectionAttributes": {
+    "dbname": "<physical-hyper-name>",
+    "projectName": "<cloud-project>",
+    "datasourceName": "<pds-name>"
+  },
+  "fields": [ ... ]
+}
+```
+
+Server 接続エントリ (`connections[<conn-id>]`):
+
+```json
+{
+  "connectionType": ".v1.SqlConnection",
+  "id": "<conn-uuid>",
+  "name": "<server> (<site>)",
+  "isPackaged": false,
+  "connectionAttributes": {
+    "server": "https://<host>",
+    "port": "443",
+    "query-category": "Data",
+    "siteUrlName": "<site-url-name>",
+    "channel": "https",
+    "class": "sqlproxy",
+    "directory": "/dataserver",
+    "odbc-native-protocol": "yes"
+  }
+}
+```
+
+PDS dataConnection エントリ (`dataConnections[<dconn-id>]`):
+
+```json
+{
+  "connectionType": ".QueryDataConnection",
+  "id": "<dconn-uuid>",
+  "name": "<server> (<site>)",
+  "isPackaged": false,
+  "baseConnectionId": "<conn-uuid>",
+  "modifiedConnectionAttributes": {
+    "dbname": "<physical-hyper-name>",
+    "projectName": "<cloud-project>",
+    "datasourceName": "<pds-name>"
+  }
+}
+```
+
+⚠️ `dbname` の罠:
+
+- **publish 時には `dbname` が必須**。LoadSqlProxy の `connectionAttributes.dbname` と dataConnection の `modifiedConnectionAttributes.dbname` のどちらかでも欠けると `errorCode=280003` で拒否される
+- ただし publish-time validation は値の妥当性をチェックしない (= 任意の placeholder 文字列で publish 通る)
+- run 時には実 dbname が必要 (= 不一致だと `Input data source not found` 系で finishCode=1)
+- Tableau Cloud は新規 publish された PDS に `<datasourceName>_<17桁ハッシュ>` 形式の物理 hyper 名を割り振る (ビルド時点では未確定)
+- ヘルパ (`flow_io.add_pds_input`) は `dbname=None` 渡しても `<datasourceName>_placeholder` を自動挿入するので publish は通る。run 前に prep-deployer の `discover_pds_dbname.py` で上流 PDS の実 dbname を解決して patch する
+
+### LoadHyper (ローカル `.hyper` 参照、Cloud では使えない)
+
+Prep Builder GUI 単体検証用 (Cloud に上げない短期検証) なら LoadHyper でも良い:
+
+```python
+new_input_node = {
+    "nodeType": "LoadHyper",
+    "name": "stg_snowflake__orders",
+    "filePath": "../staging/stg_snowflake__orders.hyper",
+    "nextNodes": [<dependent-node-id>],
+    "previousNodes": []
+}
+```
+
+ただし Cloud に publish しても下流 run でそのローカル `.hyper` は参照できない。`connectionId=None` + connections 空のままだと publish 自体が `errorCode=280003` で弾かれる (現状の prep-builder の制限 B1)。Cloud に上げる .tfl では **必ず LoadSqlProxy** を使う。
+
+### Output ノードの種別ガイド
+
+| 出力先 | nodeType（例） | 推奨用途 |
+|---|---|---|
+| Published Data Source | `PublishExtract` | **全レイヤ標準** (stg / int / marts どれでも Cloud 上で下流に繋げるため) |
+| 中間 Hyper（ローカル） | `WriteToHyper` | Prep Builder GUI 単体検証用のみ。Cloud では下流から参照不能 |
+| DB テーブル | `WriteToDatabase` | 既存 DWH に書き戻す例外ケース |
+
+PublishExtract ノードの典型構造:
+
+```json
+{
+  "nodeType": ".v1.PublishExtract",
+  "id": "<uuid>",
+  "name": "Output",
+  "baseType": "output",
+  "nextNodes": [],
+  "projectName": "<cloud-project>",
+  "projectLuid": "<project-luid>",
+  "datasourceName": "<pds-name>",
+  "datasourceDescription": "",
+  "serverUrl": "https://<host>/#/site/<site-url-name>"
+}
+```
+
+各レイヤの flow の PublishExtract Output は、その flow が置かれる layer project と同じ場所に書く (stg flow → `<target>/stg` PDS / int → `<target>/intermediate` / marts → `<target>/marts`)。`projectLuid` は `deploy-context.md` (prep-extractor Phase B 出力) から取得。`datasourceName` は flow 名と一致 (例 `stg_transactions` → `stg_transactions` PDS)。
+
+### SuperTransform を actions 単位で分割
+
+1 つの SuperTransform を 2 つ以上に分け、別 .tfl に振り分けるパターン:
+
+```python
+import copy
+src_node = original["nodes"]["<old-supertransform-id>"]
+all_actions = src_node["beforeActionAnnotations"]
+
+stg_node = copy.deepcopy(src_node)
+stg_node["id"] = "<new-id-1>"
+stg_node["name"] = "Clean 1 (Rename only)"
+stg_node["beforeActionAnnotations"] = [all_actions[i] for i in [0, 1, 2, 3]]
+
+int_node = copy.deepcopy(src_node)
+int_node["id"] = "<new-id-2>"
+int_node["name"] = "Clean 1 (ROW_NUMBER LOD)"
+int_node["beforeActionAnnotations"] = [all_actions[i] for i in [4]]
+```
+
+保全ルール:
+- **元の actions 順序を維持**: 後段は前段の出力列を参照する
+- **空ノード（actions=0）は新 .tfl に含めず削除**
+- **分割後の前段・後段リワイヤ**: 元 SuperTransform の `previousNodes` / `nextNodes` を 2 つの新ノード両端に張り直す
+
+### 不要フィールドの除去
+
+新 .tfl では:
+- `nodes`: 抽出ノード ＋ 新規 Input/Output のみ残す
+- `connections`: 該当する接続のみ残す
+- `name`: 新 .tfl の名前に変更
+- `loomVersion` 等のメタは保持（ユーザーの Tableau Prep バージョンに合わせる）
+
+### zip 化して .tfl 保存
+
+```python
+from flow_io import load_aux_entries, pack_flow_json, PUBLISHABLE_AUX_ENTRIES
+
+aux_all = load_aux_entries(src_path)
+aux = {k: aux_all[k] for k in PUBLISHABLE_AUX_ENTRIES if k in aux_all}
+pack_flow_json(new_flow_json, output_path, aux_entries=aux)
+```
+
+`aux_entries` を省略すると `flow` だけの zip になり、publish が `errorCode=280003` で拒否される。元 .tfl から `maestroMetadata` と `displaySettings` を必ず引き継ぐこと (詳細は冒頭の「`.tfl` の zip 内 entry (詳細)」節)。
+
+`.tflx` を作る場合は `.hyper` ファイルも zip 内に含める。MVP は `.tfl`（JSON のみ）で十分。
+
+## 接続定義 (DB 直接接続の例)
+
+```json
+"<conn-id>": {
+  "connectionType": "snowflake",
+  "server": "...",
+  "dbname": "...",
+  "schema": "...",
+  "username": "..."
+}
+```
+
+Tableau Server 上の Published Data Source / 仮想接続を参照する形 (LoadSqlProxy 経由) は上の「切れた依存を新 Input ノードに置換」節を参照。
+
+## .tfl と .tflx の使い分け
+
+| 用途 | 推奨 |
+|---|---|
+| git 管理する原本 | `.tfl`（軽い、JSON のみ、diff 可能） |
+| 動作確認・受け渡し | `.tflx`（extract 含むので即動く） |
+| Tableau Server / Cloud への publish | どちらでも可 |
+
+## バージョン互換
+
+- **下位互換**: 新しい Tableau Prep で古い .tfl を開ける（自動アップグレード）
+- **上位互換なし**: 古い Tableau Prep で新しい .tfl は開けないことがある
+
+build 時に生成する .tfl は **ユーザーの Tableau Prep バージョンに合わせる**（出力時に `loomVersion` を指定）。
+
+## 未知のノード種別への対処
+
+新しい Tableau バージョンで未知の `nodeType` が出る可能性:
+
+- extractor: `unknown` ラベルで Warnings に記載、処理続行
+- prep-architect analyze: レイヤ推定保留（要判断としてマーク）
+- prep-builder build: 元のノード定義をそのまま転写（変更しない）
+
+判断に迷ったら **中断してユーザーに報告**。

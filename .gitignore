@@ -1,0 +1,38 @@
+# Local development notes — not tracked, but keep the folder + README discoverable
+notes/*
+!notes/README.md
+
+# Work folder — local experiments, analysis outputs, downloaded .tfl files; not tracked
+work/*
+!work/README.md
+notes/*
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
+
+# Python (Skill 内 scripts/ で Python を使う場合)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Tableau 一時ファイル
+*.tflbak
+*.twbr
+
+# 個人設定
+.claude/settings.local.json
+
+# Playwright MCP scratch (snapshots, console logs)
+.playwright-mcp/
+
+# Secrets — NEVER commit
+.env
+.env.local
+.env.*.local
+!.env.template
+!.env.example
