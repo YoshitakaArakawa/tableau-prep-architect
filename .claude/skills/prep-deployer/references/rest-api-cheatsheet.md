@@ -32,7 +32,7 @@ Content-Type: application/json
 
 ```python
 auth = TSC.PersonalAccessTokenAuth("my-pat", "<secret>", site_id="mysite")
-server = TSC.Server("https://10ax.online.tableau.com", use_server_version=True)
+server = TSC.Server("https://<your-pod>.online.tableau.com", use_server_version=True)
 with server.auth.sign_in(auth):
     ...
 ```

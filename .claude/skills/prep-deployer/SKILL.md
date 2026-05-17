@@ -108,7 +108,7 @@ VizQL Data Service で Published DS にアサーション (not_null / unique / r
 `.env` ファイルから PAT を読み込む。Repo 直下 [scripts/tableau_auth.py](../../../scripts/tableau_auth.py) を共通モジュールとして import。
 
 ```
-SERVER=https://10ax.online.tableau.com
+SERVER=https://<your-pod>.online.tableau.com
 SITE_NAME=mysite
 PAT_NAME=...
 PAT_VALUE=...

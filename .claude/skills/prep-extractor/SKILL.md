@@ -289,7 +289,7 @@ python .claude/skills/prep-extractor/scripts/get_project_structure.py \
 
 ## URL ID 解決について
 
-`https://10ax.online.tableau.com/#/site/<contentUrl>/projects/<id>` の数値 ID は **vizportalUrlId** で、Tableau REST API の標準エンドポイント (`GET /sites/{site-id}/projects`) には **返らない**。よって `1117306` のような数値から LUID への直接マップは不可。代替手段:
+`https://<your-pod>.online.tableau.com/#/site/<contentUrl>/projects/<id>` の数値 ID は **vizportalUrlId** で、Tableau REST API の標準エンドポイント (`GET /sites/{site-id}/projects`) には **返らない**。よって `1117306` のような数値から LUID への直接マップは不可。代替手段:
 
 - ユーザーに project name または `Parent/Child` path を聞く（本フェーズの基本動作）
 - Metadata API (GraphQL) も `vizportalUrlId` を返さないため逆引き不可（検証済み）
