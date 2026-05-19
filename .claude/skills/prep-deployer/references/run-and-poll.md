@@ -129,17 +129,32 @@ notes: Extract refresh failed: max extract size exceeded
 
 | 操作 | 並列可否 |
 |---|---|
-| 同じ flow を同時に複数 run | ❌ — 既に running の場合は新規 run リクエストが拒否される |
-| 異なる flow を同時に run | ✅ |
-| 同じ flow を順次 run（DAG 連鎖） | ✅ — 前段の完了を `--wait` で待ってから次を実行 |
+| 同じ flow を同時に複数 run | ❌ — 既に running の場合は新規 run リクエストが server で拒否される |
+| 異なる flow を `--wait` で並列起動 (`run_flow.py` を 2 つ同時に走らせる) | ❌ — server-side では別 job として並列実行可だが、**`tableauserverclient` は同一 PAT で再 sign_in すると先行プロセスの token を invalidate** する。後発の sign_in が走った瞬間に先発プロセスの polling は 401 (Unauthorized) で死ぬ。先発の job 自体は server-side で完走するが、client は finishCode を観測できないまま終了する |
+| 異なる flow を `--no-wait` で発火 → 後で `get_job_status.py` で個別 polling | ✅ — sign_in / sign_out が短時間で閉じるため token 競合が起きない。**run の並列化が必要ならこのパターン一択** |
+| 同じ flow を順次 run（DAG 連鎖） | ✅ — `--wait` で前段の完了を待ってから次を実行 |
 
-本リポジトリ同梱の `run_flow.py` は 1 フロー単位の実行のみ。連鎖実行はシェルで `&&` 連結するか、Tableau の Linked Tasks を使う：
+本リポジトリ同梱の `run_flow.py` は 1 フロー単位の実行のみ。**`--wait` のデフォルト動作は直列前提**。連鎖実行はシェルで `&&` 連結するか、Tableau の Linked Tasks を使う：
 
 ```bash
 python run_flow.py --flow-name "stg_orders" && \
 python run_flow.py --flow-name "int_orders_enriched" && \
 python run_flow.py --flow-name "fct_sales"
 ```
+
+並列化したい場合 (例: 同一レイヤ内の独立な flow を同時に回す):
+
+```bash
+# fire-and-forget でジョブを起動
+python run_flow.py --flow-name "stg_orders" --no-wait      # → jobId_A を emit
+python run_flow.py --flow-name "stg_customers" --no-wait   # → jobId_B を emit
+
+# 個別に polling (sign_in は各呼び出しで完結、token 競合なし)
+python get_job_status.py --job-id <jobId_A>
+python get_job_status.py --job-id <jobId_B>
+```
+
+`--wait` を 2 プロセス並列で走らせると client が 401 で死ぬので、autonomous 実行でも採用しない。
 
 ## run 後の manifest 更新
 

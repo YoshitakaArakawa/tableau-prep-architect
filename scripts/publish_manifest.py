@@ -263,6 +263,15 @@ def cmd_init(args: argparse.Namespace) -> int:
     flows_dir = Path(args.flows_dir)
     output_path = Path(args.output)
 
+    if output_path.exists() and not args.force:
+        print(
+            f"[publish_manifest] ERROR: {output_path} already exists. "
+            f"Re-init would overwrite publish/run state from prior runs. "
+            f"Pass --force to overwrite, or omit init to preserve the existing manifest.",
+            file=sys.stderr,
+        )
+        return 1
+
     plan_md = plan_path.read_text(encoding="utf-8")
     summary_md = summary_path.read_text(encoding="utf-8")
 
@@ -435,6 +444,9 @@ def main() -> int:
                         help="Path to write publish-manifest.json")
     p_init.add_argument("--original-flow-luid", default=None,
                         help="Original flow LUID if known (from session intake Q1)")
+    p_init.add_argument("--force", action="store_true",
+                        help="Overwrite an existing manifest at --output. "
+                             "Default behaviour errors out to preserve prior publish/run state.")
     p_init.set_defaults(func=cmd_init)
 
     p_up = sub.add_parser("update-publish", help="Mark a decomposed flow as published or failed")

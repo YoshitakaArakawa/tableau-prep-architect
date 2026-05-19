@@ -246,9 +246,9 @@ for path in generated_tfls:
 
 詳細な原理は decompose 側 [../../../../references/decomposition-plan-format.md](../../../../references/decomposition-plan-format.md) の Lineage closure invariant 節を参照。
 
-### Step 4.6: publish-manifest 初期化
+### Step 4.6: publish-manifest 初期化 / 保持
 
-全 .tfl を書き出して検証を通したら、session manifest を初期化する:
+全 .tfl を書き出して検証を通したら、session manifest を扱う。**既存の `publish-manifest.json` が `--output` 位置にあれば、原則保持** (上書きしない)。`init` は新規セッション (manifest 不在) のときだけ呼ぶ。
 
 ```bash
 python scripts/publish_manifest.py init \
@@ -259,14 +259,29 @@ python scripts/publish_manifest.py init \
   --original-flow-luid <luid-if-known>
 ```
 
-スクリプトの動作:
+挙動:
+
+- `--output` 既存ファイルなしの場合: `publish-manifest.json` を `status="pending"` / `luid=null` で新規生成
+- `--output` 既存ファイルありの場合: **デフォルトで exit 1 + エラーメッセージ** (publish/run 状態を失わないため)。再 build (例: decompose 修正後の rebuild) であってもこの保護は有効
+
+スクリプトの動作 (新規生成時):
 
 - decomposition-plan の `## Output mapping (original → decomposed)` 表をパースして元 PDS と marts 新 flow の対応を取得
 - flow-summary.md から元フロー名と元 output PDS リストを抽出
 - `<session>/flows/{staging,intermediate,marts}/*.tfl` をスキャンして各 .tfl の PublishExtract output PDS を抽出
-- これらをマージして `publish-manifest.json` を `status="pending"` / `luid=null` で書き出す
+- これらをマージして `publish-manifest.json` を書き出す
 
 `--original-flow-luid` は session intake Q1 で確定していれば渡す。null でも `resolve-luids` フェーズ (prep-deployer 後段) で名前から逆引きされるので任意。
+
+#### 既存 manifest を意図的に上書きしたいとき
+
+decomposition-plan の Output mapping を変更した、`flows/` から .tfl を増減した等、**manifest の構造自体を再生成したい** 場合のみ `--force` を付ける:
+
+```bash
+python scripts/publish_manifest.py init ... --force
+```
+
+publish/run 状態は **完全に失われる** ので、上書き前に手動で `cp publish-manifest.json publish-manifest.json.bak` を取り、必要なら後で merge する。再 build したが Output mapping は変えていない場合は `--force` を付けないこと (既存 manifest がそのまま正しい)。
 
 manifest format は [../../../../references/publish-manifest-format.md](../../../../references/publish-manifest-format.md)。
 
