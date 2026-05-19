@@ -35,6 +35,8 @@ key_columns / measure_columns / split_dimension の指定は受け付けない (
 
 `pairs.json` (Step 1 のペア解決中間ファイル) も同じ directory に残してよい (デバッグ用)。
 
+メイン会話への戻り値の末尾に **`## Timing` ブロック** を必ず含める ([references/skill-timing-contract.md](../../../references/skill-timing-contract.md))。本 Skill の breakdown 推奨項目: `pair resolve` / `metadata API (N 件)` / `query-datasource (N 件)` / `flag check` / `write`。
+
 ## ワークフロー
 
 進捗:

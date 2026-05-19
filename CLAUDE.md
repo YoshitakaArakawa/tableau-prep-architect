@@ -108,6 +108,8 @@ work/<yyyymmdd>_<tag>/
 
 git 追跡: `work/README.md` を除き **追跡外**。各セッションが個別のもので、リポ本体には属さないため。固まった知見は適切な場所に **昇格** させる: 規約 → CLAUDE.md / 判断基準 → Skill `references/` / 実装 → `scripts/` (横断) または Skill `scripts/` (専用)。
 
+**事後の実行時間計測 tip**: セッションの phase 別所要時間が知りたくなったら、`work/<session>/` 配下のファイル mtime を時系列で並べると粗い timeline を復元できる。各 phase は特徴的なファイルを残す: `reports/deploy-context.md` (extractor Phase B 完了) / `reports/flow-summary.md` (Phase A 完了) / `reports/analysis-*.md` (architect 完了) / `reports/decomposition-plan-*.md` (architect/builder の最終 edit) / `scripts/build_tfls.py` (builder 完了) / `flows/staging/*.tfl` mtime (patch_project_luid 後) / `reports/pairs.json` / `reports/comparison-report.md` (comparator)。PowerShell なら `Get-ChildItem work/<session> -Recurse -File | Sort-Object LastWriteTime | Select-Object LastWriteTime,FullName`。subagent fork の内部時間が見えないとき特に有用。
+
 **このリポジトリの直下に `flows/` / `models/` 等のデータディレクトリを作らない**。理由: このリポは **Skill 配布専用** でデータ実体はバージョン管理対象外。リポ直下の `flows/` は配布物とデータ実体を混在させ、`.gitignore` 漏れや配布物の肥大を招く。
 
 ## Repo 構造
