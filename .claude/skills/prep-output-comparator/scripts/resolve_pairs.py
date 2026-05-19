@@ -50,7 +50,6 @@ query FlowDownstreamDatasources($luid: String!) {
       luid
       name
       projectName
-      projectLuid
     }
   }
 }
@@ -148,13 +147,11 @@ def main() -> int:
                 "luid": orig.get("luid"),
                 "name": orig.get("name"),
                 "project_name": orig.get("projectName"),
-                "project_luid": orig.get("projectLuid"),
             },
             "new": {
                 "luid": new.get("luid"),
                 "name": new.get("name"),
                 "project_name": new.get("projectName"),
-                "project_luid": new.get("projectLuid"),
                 "source_flow_luid": new.get("source_flow_luid"),
             },
         })
