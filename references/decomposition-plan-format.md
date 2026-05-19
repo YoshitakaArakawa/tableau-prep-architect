@@ -10,20 +10,29 @@ note: 必須セクション (Summary / New .tfl files / Actions-level splits / O
 
 ## トップレベル構造
 
-必須セクション（順序固定）：
+セクション（順序固定）。**必須** と **optional** で区別する:
 
 ```markdown
 # Decomposition Plan: <flow-name>
 
-## Summary
-## New .tfl files
-## Actions-level splits
-## Output mapping (original → decomposed)
-## Target Tableau Cloud project layout
-## Dependency DAG (Mermaid)
-## Migration order
-## Alternatives considered
+## Summary                                          # 必須
+## New .tfl files                                   # 必須
+## Actions-level splits                             # 必須 (該当ノードあれば本文、無ければ "なし" の 1 行)
+## Output mapping (original → decomposed)           # 必須
+## Target Tableau Cloud project layout              # 必須
+## Dependency DAG (Mermaid)                         # 必須
+## Migration order                                  # 必須 (簡潔な箇条書き)
+## Alternatives considered                          # optional (非自明な判断分岐があった時のみ)
 ```
+
+## Verbosity policy (出力量最小化)
+
+prep-builder / prep-deployer は本文書を機械的に消費する。**冗長な解説は output token 浪費** で、Skill fork 時間を直接押し上げる。以下に従う:
+
+- **Description**: 各 .tfl のセクションで **1-2 行に圧縮**。業務的な詳細解説は `analysis-*.md` 側に既にある (重複しない)
+- **Alternatives considered**: 非自明な判断分岐 (例: 1 entity 1 .tfl ルールを破る判断、独自命名規約を採用する判断) があったときのみ書く。自明な決定では本セクション自体を **省略可** (テンプレで 3 案検討するのは不要)
+- **Upstream lineage**: 表は必須だが、Source Prev chain は **連続するステップなら区間表記** で良い (例: `#8 → #9 → ... → #22` ではなく `#8..#22`)
+- **Migration order**: 段階番号 + 1 行説明の箇条書き。各 step を見出し + 段落で展開しない
 
 各セクションが参照する判断基準:
 

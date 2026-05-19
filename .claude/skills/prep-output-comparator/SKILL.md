@@ -3,6 +3,7 @@ name: prep-output-comparator
 description: 元フローの最終 Published DS と分解後フローの最終 Published DS を Tableau Metadata API + Tableau MCP で比較し、列差分と全体行数差分の機械的差分を Markdown レポートとして出力する Skill。prep-deployer の publish/run 完了後に「分解後 DS が元と等価か」の基礎的な parity チェックをしたいとき、ユーザーが「E2E 比較して」「元と新で差分を確認して」「parity チェックして」と発言したときに起動する。原因分析・修正提案・値そのものの比較は持たない (値同値性が必要なら caller が個別に query-datasource を叩くか、本 Skill を fork して拡張する)。修正判断はメインエージェントが Markdown を読んで prep-builder / prep-deployer の再呼び出しで対応する。
 context: fork
 agent: general-purpose
+model: claude-sonnet-4-6
 allowed-tools: Read Write Bash(python *) Glob Grep
 ---
 
