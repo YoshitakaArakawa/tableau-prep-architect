@@ -327,10 +327,7 @@ graph TD
 
 ## ファイル名と出力先
 
-| ケース | 出力 |
-|---|---|
-| 短いプラン (< 5 新 .tfl) | 会話に直接 markdown 出力 |
-| 長いプラン (5+ 新 .tfl) | `decomposition-plan-<flow-name>.md` ファイル + 会話にサマリ |
+`<output_dir>/decomposition-plan-<flow-name>.md` に必ずファイル出力する (短いプランでも inline 返しはしない)。会話への戻り値は実行サマリのみ (prep-architect [SKILL.md §出力契約](../.claude/skills/prep-architect/SKILL.md#出力契約))。
 
 ## prep-builder / prep-deployer への引き継ぎ
 

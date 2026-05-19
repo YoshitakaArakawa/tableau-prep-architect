@@ -154,10 +154,7 @@ analyze が flow-summary.md に加える価値は **「業務的解釈」**: Lay
 
 ## 出力先
 
-| ケース | 出力先 |
-|---|---|
-| 短いフロー (< 30 ステップ) | 会話に直接 markdown 出力 |
-| 長いフロー (30+ ステップ) | `analysis-<flow-name>.md` ファイル + 会話にサマリ |
+`<output_dir>/analysis-<flow-name>.md` に必ずファイル出力する。会話への戻り値は実行サマリのみ ([SKILL.md §出力契約](../SKILL.md#出力契約))。
 
 ## decompose への引き継ぎ
 
