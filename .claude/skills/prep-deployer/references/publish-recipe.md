@@ -47,7 +47,7 @@ publish に進む前に確認すべき項目：
 - `flow_io.add_pds_input` は `dbname=None` 渡されたら `<datasourceName>_placeholder` を自動挿入するので publish は通る
 - 上流 publish/run 完了後に `discover_pds_dbname.py` で実 dbname を解決し、`flow_io.patch_pds_dbname` で下流 .tfl の LoadSqlProxy + dataConnection 両方の dbname を書き換える。詳細は [../scripts/discover_pds_dbname.py](../scripts/discover_pds_dbname.py)。
 
-**並列化できる粒度**: 同一レイヤ内の複数 .tfl は **publish のみ並列可**。**run は直列が前提** (`--wait` を 2 プロセス並列で走らせると `tableauserverclient` の同一 PAT 再 sign_in が先発 token を invalidate し、polling 側が 401 で死ぬため)。同一レイヤ内 run を並列したい場合は `run_flow.py --no-wait` で全件を発火し、別途 `get_job_status.py --job-id <id>` で各 jobId を polling する。詳細と推奨パターンは [run-and-poll.md の §並列実行と排他](run-and-poll.md#並列実行と排他) を参照。
+**並列化できる粒度**: 同一レイヤ内の複数 .tfl は **publish のみ並列可**。**run は同一 PAT では直列が前提** — `--wait` を 2 プロセス並列で走らせると、**Tableau Cloud が同一 PAT で 1 active session のみ許可** する仕様により、後発 `run_flow.py` の sign_in が先発の token を server-side で revoke、先発の polling は 401 で死ぬ (TSC client 側の問題ではなく Tableau Cloud の認証仕様、検証済)。並列したい場合は `run_flow.py --no-wait` を **時間的に重ならない sequential 起動** で発火 → 単一プロセスで `get_job_status.py --job-id <id>` を順次 polling。server-side では job が並列実行されるため wall-clock は `max(durations)` で済む。詳細と推奨パターンは [run-and-poll.md の §並列実行と排他](run-and-poll.md#並列実行と排他) を参照。
 
 **レイヤ間ゲートは承認ではなく依存関係**: 各レイヤ完走 (publish + run + finishCode=0) してから次レイヤへ進むが、これは下流 Input が上流 PDS を参照する依存性のためで、人間承認のためではない。途中レイヤで finishCode=1 や publish エラーが出たら [autonomous-recovery.md](autonomous-recovery.md) で分類 → 自律リトライ or escalation。escalation 発火時は下流レイヤに進まずユーザーに報告。
 

@@ -127,34 +127,50 @@ notes: Extract refresh failed: max extract size exceeded
 
 ## 並列実行と排他
 
-| 操作 | 並列可否 |
-|---|---|
-| 同じ flow を同時に複数 run | ❌ — 既に running の場合は新規 run リクエストが server で拒否される |
-| 異なる flow を `--wait` で並列起動 (`run_flow.py` を 2 つ同時に走らせる) | ❌ — server-side では別 job として並列実行可だが、**`tableauserverclient` は同一 PAT で再 sign_in すると先行プロセスの token を invalidate** する。後発の sign_in が走った瞬間に先発プロセスの polling は 401 (Unauthorized) で死ぬ。先発の job 自体は server-side で完走するが、client は finishCode を観測できないまま終了する |
-| 異なる flow を `--no-wait` で発火 → 後で `get_job_status.py` で個別 polling | ✅ — sign_in / sign_out が短時間で閉じるため token 競合が起きない。**run の並列化が必要ならこのパターン一択** |
-| 同じ flow を順次 run（DAG 連鎖） | ✅ — `--wait` で前段の完了を待ってから次を実行 |
+### Tableau Cloud の認証モデル制約 (重要)
 
-本リポジトリ同梱の `run_flow.py` は 1 フロー単位の実行のみ。**`--wait` のデフォルト動作は直列前提**。連鎖実行はシェルで `&&` 連結するか、Tableau の Linked Tasks を使う：
+**Tableau Cloud は同一 PAT で 1 active session のみ許可する**。新しい sign_in が走った瞬間、以前発行された credential token は server-side で即座に revoke される。`tableauserverclient` 側に invalidation ロジックは無く (`Server` インスタンスは独立した `_auth_token` を保持するだけ)、これは Tableau Cloud 側の認証仕様。
+
+検証: 同一プロセス内で `server.auth.sign_in(auth)` を 2 回続けると、1 回目の token を使った API call が 401 (`401002 Invalid authentication credentials`) を返す。同一スレッド外でも threaded で並列 sign_in したワーカーは、後発の sign_in 後最初の API call で同様に 401。
+
+### 並列可否の場合分け
+
+| 操作 | 並列可否 | 根拠 |
+|---|---|---|
+| 同じ flow を同時に複数 run | ❌ | server 側で同一 flow の同時 run リクエストが拒否される |
+| 異なる flow を `--wait` で同一 PAT 並列起動 | ❌ | 後発 `run_flow.py` の sign_in が server 側で先発 token を revoke。先発の polling は 401 で死ぬ (先発の job 自体は server-side で完走するが client は finishCode を観測できない) |
+| 異なる flow を `--no-wait` で **時間的に重ならない sequential 起動** + 単一プロセスで後追い polling | ✅ | 各 `--no-wait` 呼び出しは数百ミリ秒で sign_in → POST → sign_out が閉じる。次の呼び出しと sign_in が重ならないので token 競合なし。server-side では job が並列実行される |
+| 同じ flow を順次 run (DAG 連鎖) | ✅ | `--wait` で前段の完了を待ってから次 |
+| **別 PAT を 2 つ用意して `--wait` 並列** | ✅ | PAT が異なれば session は独立。組織で複数 PAT を発行するコスト (失効管理 × N) と引換 |
+
+### 推奨パターン: server-side parallel + client-side serial signin
+
+依存関係のない flow (例: 同一レイヤ内の独立 stg flow) を並列実行したい場合の standard パターン:
+
+```bash
+# Step 1: 各 flow を --no-wait で sequential 起動 (sign_in は順番に発生、競合しない)
+python run_flow.py --flow-name "stg_orders"    --no-wait    # → RESULT_JSON jobId_A
+python run_flow.py --flow-name "stg_customers" --no-wait    # → RESULT_JSON jobId_B
+python run_flow.py --flow-name "stg_products"  --no-wait    # → RESULT_JSON jobId_C
+
+# この時点で server-side では job_A / job_B / job_C が並列実行されている
+# wall-clock は max(run_A, run_B, run_C) で済む (sequential 合計ではない)
+
+# Step 2: 単一プロセスで全 jobId を順次 polling
+python get_job_status.py --job-id <jobId_A>    # 完了まで block
+python get_job_status.py --job-id <jobId_B>
+python get_job_status.py --job-id <jobId_C>
+```
+
+`get_job_status.py` を順次走らせている間、各呼び出しは独立した sign_in / sign_out で完結するため token 競合は起きない。
+
+DAG 連鎖 (前段の完了が次段の開始条件) の場合は従来通り `--wait` を `&&` で連結:
 
 ```bash
 python run_flow.py --flow-name "stg_orders" && \
 python run_flow.py --flow-name "int_orders_enriched" && \
 python run_flow.py --flow-name "fct_sales"
 ```
-
-並列化したい場合 (例: 同一レイヤ内の独立な flow を同時に回す):
-
-```bash
-# fire-and-forget でジョブを起動
-python run_flow.py --flow-name "stg_orders" --no-wait      # → jobId_A を emit
-python run_flow.py --flow-name "stg_customers" --no-wait   # → jobId_B を emit
-
-# 個別に polling (sign_in は各呼び出しで完結、token 競合なし)
-python get_job_status.py --job-id <jobId_A>
-python get_job_status.py --job-id <jobId_B>
-```
-
-`--wait` を 2 プロセス並列で走らせると client が 401 で死ぬので、autonomous 実行でも採用しない。
 
 ## run 後の manifest 更新
 
