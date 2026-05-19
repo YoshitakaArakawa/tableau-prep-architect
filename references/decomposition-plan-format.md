@@ -221,8 +221,35 @@ python create_projects.py --parent-name "Sales Analytics"
 
 ### Dependency DAG (Mermaid)
 
+**Before (元フロー)** と **After (分解後)** の 2 ブロック構成。ユーザーは両図を見比べて「どのノードがどの .tfl に振り分けられたか」「stg/int/marts の振り分けが妥当か」を視覚的に確認・合意する。decompose 完了後 build 前のユーザー確認 ([../.claude/skills/prep-architect/SKILL.md](../.claude/skills/prep-architect/SKILL.md) の「analyze と decompose の間で一度必ずユーザーに確認を取る」) で本 DAG を提示する。
+
 ```markdown
-## Dependency DAG
+## Dependency DAG (Mermaid)
+
+### Before (元フロー)
+
+```mermaid
+graph TD
+  src_sf[/"Salesforce Opportunity"/]
+  src_orders[/"Snowflake Orders"/]
+  src_cust[/"Snowflake Customers"/]
+  n1[#1 Input SF]
+  n2[#2 Input Orders]
+  n3[#3 Input Customers]
+  n9[#9 Join orders × opps]
+  n21[#21 Classify customer]
+  n38[#38 Aggregate sales]
+  out1[/"fct_sales (PDS)"/]
+  out2[/"dim_customer (PDS)"/]
+
+  src_sf --> n1 --> n9
+  src_orders --> n2 --> n9
+  src_cust --> n3 --> n21
+  n9 --> n38 --> out1
+  n21 --> out2
+```
+
+### After (分解後)
 
 ```mermaid
 graph TD
@@ -249,6 +276,16 @@ graph TD
   dim_cust --> rpt_combined
 ```
 ```
+
+**書式ルール**:
+
+- **Before は元フロー全ノードを描かなくて良い**。主要な分岐点 (Input / Join / Output / レイヤ判定の根拠になる中間ノード) のみ抽出する。50+ ノードを全描画すると視認性が落ちる
+- **After は分解後 .tfl すべてを描く**。粒度が荒くなり全描画可能
+- ノード形状の使い分け:
+  - Source / Output PDS: `[/"..."/]` (sliced shape)
+  - 元フローのノード (Before): `[#<index> <node-name>]` (rect、`#` で原 flow-summary の Topology 表 index と対応付け)
+  - 分解後 .tfl (After): `[<tfl-name>]` (rect)
+- ノード ID (左側の `n1`, `stg_sf` 等) は短く、表示名は冗長でも可
 
 ### Migration order
 
