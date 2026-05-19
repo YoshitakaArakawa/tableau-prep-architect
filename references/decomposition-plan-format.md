@@ -83,6 +83,8 @@ note: 必須セクション (Summary / New .tfl files / Actions-level splits / T
   - `stg_salesforce__opportunities.hyper`
 - **Outputs**:
   - `int_orders_enriched.hyper`
+- **Joins**:
+  - #9 SuperJoin orders × opps: cardinality `N:1` (各 order に対し対応する opp は 1 件)
 - **Included original steps**: 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20
 - **Upstream lineage** (REQUIRED):
   | Included step | Reachable from Input(s) | Source Prev chain |
@@ -131,9 +133,23 @@ note: 必須セクション (Summary / New .tfl files / Actions-level splits / T
   - Type: Published Data Source
   - Name: `rpt_sales_with_customer`
   - Target project: `Sales Analytics/marts`
+- **Joins**:
+  - LEFT JOIN fct_sales × dim_customer on customer_id: cardinality `N:1` (各 sale に対し対応する customer は 1 件)
 - **Description**:
   fct_sales × dim_customer を customer_id で LEFT JOIN した OBT。Workbook では Published DS 同士の Relationship が使えないため、BI が顧客属性込みで売上分析を行う用途にはこれを読ませる。
 ```
+
+### Joins field の書式
+
+`**Joins**` フィールドは **SuperJoin ノード、または .tfl 内で Join を行うステップを含む .tfl のみ** で必須 (Hyper Input 同士の Join、Published DS 同士の Join どちらも対象)。SuperUnion は row 連結のため cardinality 概念が適用外で、本フィールドの対象外。
+
+書式:
+
+- 1 行 1 Join。`#<step-index> <ノード名>: cardinality \`<N:M>\` (補足)` または `<JOIN-type> <left> × <right> on <key>: cardinality \`<N:M>\` (補足)`
+- cardinality は `1:1` / `1:N` / `N:1` / `N:N` / `不明` のいずれか
+- **不明な場合も明示的に `不明` と書く** (空欄不可、書き忘れ防止)
+- カッコ書きで自然言語の補足を入れて良い (例: `1:N (1 opportunity → 複数 orders)`)
+- 該当 Join が無い .tfl では本フィールドを省略する
 
 ### Lineage closure invariant (なぜ Upstream lineage が必須か)
 
