@@ -62,9 +62,15 @@ query findEmbeddedExtract($name: String!, $projectName: String!) {
 """.strip()
 
 
-def resolve_project_id(server, project_path: str) -> str:
-    parts = [seg.strip() for seg in project_path.split("/") if seg.strip()]
+def fetch_all_projects(server) -> list:
+    """Fetch every project on the site once (used as a cache by callers)."""
     all_projects, _ = server.projects.get(req_options=TSC.RequestOptions(pagesize=1000))
+    return all_projects
+
+
+def resolve_project_id(server, project_path: str, *, projects_cache: list | None = None) -> str:
+    parts = [seg.strip() for seg in project_path.split("/") if seg.strip()]
+    all_projects = projects_cache if projects_cache is not None else fetch_all_projects(server)
     parent_id = None
     for name in parts:
         match = [p for p in all_projects if p.name == name and p.parent_id == parent_id]
@@ -74,8 +80,9 @@ def resolve_project_id(server, project_path: str) -> str:
     return parent_id
 
 
-def discover(server, *, datasource_name: str, project_path: str) -> dict:
-    project_id = resolve_project_id(server, project_path)
+def discover(server, *, datasource_name: str, project_path: str,
+             projects_cache: list | None = None) -> dict:
+    project_id = resolve_project_id(server, project_path, projects_cache=projects_cache)
     # Filter by name+project_id
     req = TSC.RequestOptions()
     req.filter.add(

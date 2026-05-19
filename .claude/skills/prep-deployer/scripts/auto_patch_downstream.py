@@ -134,11 +134,13 @@ def scan_refs(tfl_path: Path, ready: dict[str, str]) -> set[str]:
     return refs
 
 
-def resolve_dbname(server, *, datasource_name: str, project_path: str, use_candidate: str) -> str:
+def resolve_dbname(server, *, datasource_name: str, project_path: str, use_candidate: str,
+                   projects_cache: list | None = None) -> str:
     result = discover_pds_dbname.discover(
         server,
         datasource_name=datasource_name,
         project_path=project_path,
+        projects_cache=projects_cache,
     )
     dbname = result["candidates"].get(use_candidate)
     if not dbname:
@@ -228,6 +230,7 @@ def main() -> int:
 
     server, auth = sign_in_server()
     with server.auth.sign_in(auth):
+        projects_cache = discover_pds_dbname.fetch_all_projects(server)
         dbnames: dict[str, str] = {}
         for ds in sorted(needed):
             dbname = resolve_dbname(
@@ -235,6 +238,7 @@ def main() -> int:
                 datasource_name=ds,
                 project_path=pds_project[ds],
                 use_candidate=args.use_candidate,
+                projects_cache=projects_cache,
             )
             dbnames[ds] = dbname
             print(f"  [ok] {ds} -> dbname={dbname!r}")
