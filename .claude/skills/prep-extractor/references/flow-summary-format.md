@@ -167,7 +167,7 @@ actions 種別ごとのフォーマット:
 Skill 起動時にユーザー（または上位 Skill）から absolute path で指定される。典型的には:
 
 ```
-work/<yyyymmdd>_<summary>/flow-summary.md
+work/<yyyymmdd>_<summary>/reports/flow-summary.md
 ```
 
 ## 後続フェーズへの引き継ぎ

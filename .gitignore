@@ -36,3 +36,7 @@ venv/
 .env.*.local
 !.env.template
 !.env.example
+
+# MCP server config — may contain tokens / personal endpoints
+.mcp.json
+!.mcp.json.template

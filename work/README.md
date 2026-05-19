@@ -10,16 +10,19 @@
 - 生成した .tfl 群の動作確認用一時置き場
 - 試行錯誤のスクラッチ
 
-## 命名規約
+## 命名規約とサブフォルダ構造
 
-各作業セッションごとに **日付プレフィクス＋作業内容サマリー** のサブフォルダを切る：
+各作業セッションごとに **日付プレフィクス＋作業内容サマリー** のサブフォルダを切る。直下は **入力 (.tfl, flow.json) + 4 サブフォルダ (reports/ flows/ scripts/ scratch/)** で固定:
 
 ```
 work/
 ├── 20260515_legacy-flow-analysis/
-│   ├── downloaded.tflx
-│   ├── analysis.md
-│   └── decomposition-plan.md
+│   ├── downloaded.tflx               # 入力
+│   ├── flow.json                     # 入力 (展開済)
+│   ├── reports/                      # Skill 生成 MD/JSON
+│   ├── flows/                        # prep-builder 出力 .tfl
+│   ├── scripts/                      # 公式の再生成スクリプト
+│   └── scratch/                      # 試行錯誤・使い捨て
 ├── 20260520_int-step-split-experiment/
 │   └── ...
 └── 20260601_rpt-design-experiment/
@@ -30,15 +33,7 @@ work/
 
 - 日付は **作業開始日**
 - 作業内容は短く（snake_case / kebab-case どちらでも可、可読性優先）
-
-## 何を置く / 置かない
-
-| 置く | 置かない |
-|---|---|
-| DL した .tfl/.tflx（テスト対象） | 本番運用する .tfl（→ ユーザー作業フォルダの `flows/` へ） |
-| 分析レポート・分解設計案（markdown） | 公開すべき規約・判断基準（→ Skill の `references/` へ昇格） |
-| 試行錯誤のスクラッチ | 実装に組み込んだロジック（→ `scripts/` へ昇格） |
-| 実データのサンプル（小規模） | 大量データ・機密実データ（別の安全な場所へ） |
+- 各サブフォルダの責務は [CLAUDE.md §work/ ディレクトリ規約](../CLAUDE.md#work-ディレクトリ規約) を参照
 
 ## 昇格ルール
 

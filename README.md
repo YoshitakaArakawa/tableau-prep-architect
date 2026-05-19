@@ -47,7 +47,7 @@ dbt のベストプラクティスを Prep に転用しますが、Tableau Workb
 
 ## 含まれる Skill / Workflow
 
-このリポジトリは 4 つの Skill (`prep-extractor` / `prep-architect` / `prep-builder` / `prep-deployer`) で構成されています。Workflow 全体図、各 Skill の役割と副作用区分、起動順序は [CLAUDE.md](CLAUDE.md#workflow) にまとめてあります（Agent 起動時に自動ロードされる真の source です）。
+このリポジトリは 5 つの Skill (`prep-extractor` / `prep-architect` / `prep-builder` / `prep-deployer` / `prep-output-comparator`) で構成されています。Workflow 全体図、各 Skill の役割と副作用区分、起動順序は [CLAUDE.md](CLAUDE.md#workflow) にまとめてあります（Agent 起動時に自動ロードされる真の source です）。
 
 ## 既知の制限
 

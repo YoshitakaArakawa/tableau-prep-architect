@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "tableau": {
+      "command": "npx",
+      "args": ["-y", "@tableau/mcp-server@latest"],
+      "env": {
+        "SERVER"          :"YOUR_SERVER_URL"
+        , "SITE_NAME"     :"YOUR_SITE_NAME"
+        , "PAT_NAME"      :"YOUR_PAT_NAME"
+        , "PAT_VALUE"     :"YOUR_PAT_VALUE"
+        , "INCLUDE_TOOLS" :"datasource"
+      }
+    }
+  }
+}

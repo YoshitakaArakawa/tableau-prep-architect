@@ -16,13 +16,13 @@ Why path/LUID and not URL?
 
 Usage:
     python get_project_structure.py --project-path "Sales Analytics" \\
-        -o work/<date>/deploy-context.md
+        -o work/<date>/reports/deploy-context.md
 
     python get_project_structure.py --project-path "99_Old/Sample Project" \\
-        -o work/<date>/deploy-context.md
+        -o work/<date>/reports/deploy-context.md
 
     python get_project_structure.py --project-id 12345-abcde \\
-        -o work/<date>/deploy-context.md
+        -o work/<date>/reports/deploy-context.md
 """
 
 from __future__ import annotations
