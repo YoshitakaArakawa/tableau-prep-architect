@@ -145,21 +145,31 @@ notes: Extract refresh failed: max extract size exceeded
 
 ### 推奨パターン: server-side parallel + client-side serial signin
 
-依存関係のない flow (例: 同一レイヤ内の独立 stg flow) を並列実行したい場合の standard パターン:
+依存関係のない flow (例: 同一レイヤ内の独立 stg flow) を並列実行したい場合の standard パターン。**実装は [scripts/run_layer.py](../../../../scripts/run_layer.py) に集約済**。
 
 ```bash
+# manifest の <layer> 内で publish=published かつ run!=success の全件を対象に、
 # Step 1: 各 flow を --no-wait で sequential 起動 (sign_in は順番に発生、競合しない)
+# Step 2: 単一 sign-in session で全 jobId を順次 polling
+# Step 3: 完了した flow ごとに publish_manifest.py update-run を呼ぶ
+python scripts/run_layer.py \
+  --manifest work/<session>/reports/publish-manifest.json \
+  --layer staging \
+  --poll-interval 15 \
+  --timeout 1800
+```
+
+`run_layer.py` の動作は本ファイル §並列実行と排他 の制約を運用に落としたもの。server-side では job が並列実行されるため wall-clock は `max(run_durations)` で済む (sequential 合計ではない)。Polling は 1 セッションで `server.jobs.get_by_id` を順次呼ぶだけなので token 競合は起きない。
+
+リトライは行わない (失敗 1 件で exit 1)。recovery は呼び出し側 (prep-deployer の SKILL ループまたはユーザー) が [autonomous-recovery.md](autonomous-recovery.md) のマッピングで判定する。
+
+手で同等のことをやりたい場合 (debug 等) は以下:
+
+```bash
 python run_flow.py --flow-name "stg_orders"    --no-wait    # → RESULT_JSON jobId_A
 python run_flow.py --flow-name "stg_customers" --no-wait    # → RESULT_JSON jobId_B
-python run_flow.py --flow-name "stg_products"  --no-wait    # → RESULT_JSON jobId_C
-
-# この時点で server-side では job_A / job_B / job_C が並列実行されている
-# wall-clock は max(run_A, run_B, run_C) で済む (sequential 合計ではない)
-
-# Step 2: 単一プロセスで全 jobId を順次 polling
-python get_job_status.py --job-id <jobId_A>    # 完了まで block
+python get_job_status.py --job-id <jobId_A>
 python get_job_status.py --job-id <jobId_B>
-python get_job_status.py --job-id <jobId_C>
 ```
 
 `get_job_status.py` を順次走らせている間、各呼び出しは独立した sign_in / sign_out で完結するため token 競合は起きない。

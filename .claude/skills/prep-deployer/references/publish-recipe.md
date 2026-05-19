@@ -47,7 +47,7 @@ publish に進む前に確認すべき項目：
 - `flow_io.add_pds_input` は `dbname=None` 渡されたら `<datasourceName>_placeholder` を自動挿入するので publish は通る
 - 上流 publish/run 完了後に `discover_pds_dbname.py` で実 dbname を解決し、`flow_io.patch_pds_dbname` で下流 .tfl の LoadSqlProxy + dataConnection 両方の dbname を書き換える。詳細は [../scripts/discover_pds_dbname.py](../scripts/discover_pds_dbname.py)。
 
-**並列化できる粒度**: 同一レイヤ内の複数 .tfl は **publish のみ並列可**。**run は同一 PAT では直列が前提** — `--wait` を 2 プロセス並列で走らせると、**Tableau Cloud が同一 PAT で 1 active session のみ許可** する仕様により、後発 `run_flow.py` の sign_in が先発の token を server-side で revoke、先発の polling は 401 で死ぬ (TSC client 側の問題ではなく Tableau Cloud の認証仕様、検証済)。並列したい場合は `run_flow.py --no-wait` を **時間的に重ならない sequential 起動** で発火 → 単一プロセスで `get_job_status.py --job-id <id>` を順次 polling。server-side では job が並列実行されるため wall-clock は `max(durations)` で済む。詳細と推奨パターンは [run-and-poll.md の §並列実行と排他](run-and-poll.md#並列実行と排他) を参照。
+**並列化できる粒度**: 同一レイヤ内の複数 .tfl は **publish のみ並列可**。**run は同一 PAT では直列が前提** — `--wait` を 2 プロセス並列で走らせると、**Tableau Cloud が同一 PAT で 1 active session のみ許可** する仕様により、後発 `run_flow.py` の sign_in が先発の token を server-side で revoke、先発の polling は 401 で死ぬ (TSC client 側の問題ではなく Tableau Cloud の認証仕様、検証済)。並列したい場合は [scripts/run_layer.py](../../../../scripts/run_layer.py) を使う — `run_flow.py --no-wait` を sequential 発火 → 単一 sign-in session で全 jobId を polling → manifest 更新まで一気通貫で行う。server-side では job が並列実行されるため wall-clock は `max(durations)` で済む。詳細と仕組みは [run-and-poll.md の §並列実行と排他](run-and-poll.md#並列実行と排他)。
 
 **レイヤ間ゲートは承認ではなく依存関係**: 各レイヤ完走 (publish + run + finishCode=0) してから次レイヤへ進むが、これは下流 Input が上流 PDS を参照する依存性のためで、人間承認のためではない。途中レイヤで finishCode=1 や publish エラーが出たら [autonomous-recovery.md](autonomous-recovery.md) で分類 → 自律リトライ or escalation。escalation 発火時は下流レイヤに進まずユーザーに報告。
 
@@ -124,45 +124,35 @@ python publish_flow.py --file stg_orders.tfl --project-path "..." --name "stg_or
 
 ## バッチ publish（レイヤ単位で publish → run → 次レイヤ）
 
-`scripts/` の `publish_flow.py` / `run_flow.py` は 1 ファイル単位なので、レイヤ単位でループ → 全部 run 完了を待ってから次レイヤへ進む：
+publish は 1 ファイル単位 (`publish_flow.py`)、run はレイヤ単位 (`run_layer.py`) で並列化する。レイヤ間は依存関係上、必ず順次:
 
 ```bash
 # Layer 1: stg
 for f in flows/staging/*.tfl; do
   python publish_flow.py --file "$f" --project-path "<target>/stg"
 done
-for f in flows/staging/*.tfl; do
-  name=$(basename "$f" .tfl)
-  python run_flow.py --flow-name "$name" --project-name "<target>/stg"
-done
-# ── 全 stg run の finishCode=0 を確認してから次へ ──
+python scripts/run_layer.py --manifest <session>/reports/publish-manifest.json --layer staging
+# ── 上の exit code 0 を確認してから次へ ──
 
 # Layer 2: int (stg の PDS を Input に取る)
 for f in flows/intermediate/*.tfl; do
   python publish_flow.py --file "$f" --project-path "<target>/intermediate"
 done
-for f in flows/intermediate/*.tfl; do
-  name=$(basename "$f" .tfl)
-  python run_flow.py --flow-name "$name" --project-name "<target>/intermediate"
-done
-# ── 全 int run の finishCode=0 を確認してから次へ ──
+python scripts/run_layer.py --manifest <session>/reports/publish-manifest.json --layer intermediate
+# ── 上の exit code 0 を確認してから次へ ──
 
 # Layer 3: marts (fct/dim 先、rpt 最後)
 for f in flows/marts/fct_*.tfl flows/marts/dim_*.tfl; do
   python publish_flow.py --file "$f" --project-path "<target>/marts"
 done
-for f in flows/marts/fct_*.tfl flows/marts/dim_*.tfl; do
-  name=$(basename "$f" .tfl)
-  python run_flow.py --flow-name "$name" --project-name "<target>/marts"
-done
+python scripts/run_layer.py --manifest <session>/reports/publish-manifest.json --layer marts
 for f in flows/marts/rpt_*.tfl; do
   python publish_flow.py --file "$f" --project-path "<target>/marts"
 done
-for f in flows/marts/rpt_*.tfl; do
-  name=$(basename "$f" .tfl)
-  python run_flow.py --flow-name "$name" --project-name "<target>/marts"
-done
+python scripts/run_layer.py --manifest <session>/reports/publish-manifest.json --layer marts
 ```
+
+`run_layer.py` は manifest の対象レイヤから `publish=published` && `run!=success` の全件を拾うので、rpt の追加 publish 後の 2 回目呼び出しでは未 run の rpt のみが選択される。
 
 スクリプトは常に非対話で動き、各レイヤ完走を確認してから次レイヤへ進む (依存関係上のゲートであって承認ゲートではない、[autonomous-execution-policy.md](autonomous-execution-policy.md) 参照)。失敗時の自律対処は [autonomous-recovery.md](autonomous-recovery.md)。
 
