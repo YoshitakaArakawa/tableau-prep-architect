@@ -138,11 +138,13 @@ PAT_VALUE=...
 | `scripts/publish_flow.py` | flow を指定プロジェクトに publish (非対話) |
 | `scripts/run_flow.py` | flow 実行 (非対話、`--wait` デフォルト True、終了時に `RESULT_JSON: {...}` 行を emit) |
 | `scripts/get_job_status.py` | ジョブステータス取得 |
+| `scripts/discover_pds_dbname.py` | 1 PDS の物理 dbname を Cloud から resolve (debug / 1 件 patch 用、複数件まとめては `auto_patch_downstream.py`) |
+| `scripts/auto_patch_downstream.py` | manifest の `run.status=success` 全件を ready 集合に、全 .tfl の LoadSqlProxy を一括 patch (idempotent) |
 | `scripts/test_published_ds.py` | (将来) VDS でアサーション実行 |
 
 Cloud 側の **構造読み取り** (`deploy-context.md` 生成) は [prep-extractor の `get_project_structure.py`](../prep-extractor/scripts/get_project_structure.py) を使う (本 Skill では読み取り系スクリプトを持たない)。
 
-認証は全スクリプトとも Repo 直下 [scripts/tableau_auth.py](../../../scripts/tableau_auth.py) を import。
+同レイヤ並列 run の orchestration は repo 直下 [scripts/run_layer.py](../../../scripts/run_layer.py) (manifest 駆動、server-side parallel)。認証は全スクリプトとも Repo 直下 [scripts/tableau_auth.py](../../../scripts/tableau_auth.py) を import。
 
 ## 設計原則
 

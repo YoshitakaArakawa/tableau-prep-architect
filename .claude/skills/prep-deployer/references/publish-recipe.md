@@ -25,18 +25,20 @@ publish に進む前に確認すべき項目：
 ```
 1. stg_* を publish → run → finishCode=0 確認  (上流依存なし、並列 publish 可)
         ↓ stg レイヤの Published DS が Cloud 上に作成済み
-2. discover_pds_dbname.py で stg PDS の dbname を解決 → 下流 (int_*) .tfl を patch
+2. auto_patch_downstream.py で manifest の ready PDS を全 .tfl に一括 patch
         ↓
 3. int_* を publish → run → finishCode=0 確認
         ↓
-4. discover_pds_dbname.py で int PDS の dbname を解決 → 下流 (fct/dim_*) .tfl を patch
+4. auto_patch_downstream.py を再実行 (int も ready になる → 下流 .tfl が更新される)
         ↓
 5. fct_* / dim_* を publish → run → finishCode=0 確認
         ↓
-6. discover_pds_dbname.py で fct/dim PDS の dbname を解決 → rpt_* を patch
+6. auto_patch_downstream.py を再実行 (fct/dim も ready に → rpt_* .tfl が更新される)
         ↓
 7. rpt_* を publish → run → finishCode=0 確認
 ```
+
+`auto_patch_downstream.py` は manifest の `run.status == success` 全件を ready 集合として、全 .tfl をスキャン → 参照のある PDS の dbname を Cloud から resolve → 一括 patch する。idempotent (再実行しても同じ dbname なら no-op) なので、各レイヤ完走後に毎回呼んで良い。同一レイヤ内に sub-DAG がある (例: intermediate 内で int_price_latest → int_transactions_enriched) 場合も、sub-DAG の wave 完走ごとに呼べばカバーできる。手動で `discover_pds_dbname.py --patch` を 1 ペアずつ叩く必要は無くなった。
 
 **なぜ run まで挟むか**: 各レイヤの flow Input (LoadSqlProxy) は上流レイヤの **Published DS が Cloud 上に既に存在すること** を前提に publish される。run 前は publish 自体は通っても、上流 PDS が無い状態で run すると `Input data source not found` で finishCode=1。1 レイヤ完了 (publish + run + 成功確認) してから次レイヤに進む。
 
@@ -45,7 +47,7 @@ publish に進む前に確認すべき項目：
 - publish 時には `dbname` の **存在** が必須 (欠落で publish 拒否、対処は本ファイル末尾の対処表参照)。中身は妥当性チェックされない (placeholder 文字列で OK)
 - run 時には **実 dbname が必要** (= 上流 PDS の物理 Hyper 名と一致しないと `Input data source not found` 系で finishCode=1)
 - `flow_io.add_pds_input` は `dbname=None` 渡されたら `<datasourceName>_placeholder` を自動挿入するので publish は通る
-- 上流 publish/run 完了後に `discover_pds_dbname.py` で実 dbname を解決し、`flow_io.patch_pds_dbname` で下流 .tfl の LoadSqlProxy + dataConnection 両方の dbname を書き換える。詳細は [../scripts/discover_pds_dbname.py](../scripts/discover_pds_dbname.py)。
+- 上流 publish/run 完了後に [../scripts/auto_patch_downstream.py](../scripts/auto_patch_downstream.py) で実 dbname を一括 resolve → 全 .tfl の LoadSqlProxy + dataConnection 両方の dbname を書き換える。1 PDS だけ debug 等で patch したい場合は [../scripts/discover_pds_dbname.py](../scripts/discover_pds_dbname.py) を直接叩く。
 
 **並列化できる粒度**: 同一レイヤ内の複数 .tfl は **publish のみ並列可**。**run は同一 PAT では直列が前提** — `--wait` を 2 プロセス並列で走らせると、**Tableau Cloud が同一 PAT で 1 active session のみ許可** する仕様により、後発 `run_flow.py` の sign_in が先発の token を server-side で revoke、先発の polling は 401 で死ぬ (TSC client 側の問題ではなく Tableau Cloud の認証仕様、検証済)。並列したい場合は [scripts/run_layer.py](../../../../scripts/run_layer.py) を使う — `run_flow.py --no-wait` を sequential 発火 → 単一 sign-in session で全 jobId を polling → manifest 更新まで一気通貫で行う。server-side では job が並列実行されるため wall-clock は `max(durations)` で済む。詳細と仕組みは [run-and-poll.md の §並列実行と排他](run-and-poll.md#並列実行と排他)。
 
@@ -127,32 +129,41 @@ python publish_flow.py --file stg_orders.tfl --project-path "..." --name "stg_or
 publish は 1 ファイル単位 (`publish_flow.py`)、run はレイヤ単位 (`run_layer.py`) で並列化する。レイヤ間は依存関係上、必ず順次:
 
 ```bash
+MANIFEST=<session>/reports/publish-manifest.json
+TARGET=<target>
+FLOWS=<session>/flows
+PATCH="python .claude/skills/prep-deployer/scripts/auto_patch_downstream.py \
+  --manifest $MANIFEST --flows-dir $FLOWS --target-path $TARGET"
+
 # Layer 1: stg
 for f in flows/staging/*.tfl; do
-  python publish_flow.py --file "$f" --project-path "<target>/stg"
+  python publish_flow.py --file "$f" --project-path "$TARGET/stg"
 done
-python scripts/run_layer.py --manifest <session>/reports/publish-manifest.json --layer staging
-# ── 上の exit code 0 を確認してから次へ ──
+python scripts/run_layer.py --manifest $MANIFEST --layer staging
+$PATCH   # stg PDS が ready -> 下流 .tfl の stg ref を一括 patch
+# ── exit code 0 を確認してから次へ ──
 
 # Layer 2: int (stg の PDS を Input に取る)
 for f in flows/intermediate/*.tfl; do
-  python publish_flow.py --file "$f" --project-path "<target>/intermediate"
+  python publish_flow.py --file "$f" --project-path "$TARGET/intermediate"
 done
-python scripts/run_layer.py --manifest <session>/reports/publish-manifest.json --layer intermediate
-# ── 上の exit code 0 を確認してから次へ ──
+python scripts/run_layer.py --manifest $MANIFEST --layer intermediate
+$PATCH   # int も ready -> 下流 .tfl の int ref も patch
+# ── exit code 0 を確認してから次へ ──
 
 # Layer 3: marts (fct/dim 先、rpt 最後)
 for f in flows/marts/fct_*.tfl flows/marts/dim_*.tfl; do
-  python publish_flow.py --file "$f" --project-path "<target>/marts"
+  python publish_flow.py --file "$f" --project-path "$TARGET/marts"
 done
-python scripts/run_layer.py --manifest <session>/reports/publish-manifest.json --layer marts
+python scripts/run_layer.py --manifest $MANIFEST --layer marts
+$PATCH   # fct/dim ready -> rpt_*.tfl の ref を patch
 for f in flows/marts/rpt_*.tfl; do
-  python publish_flow.py --file "$f" --project-path "<target>/marts"
+  python publish_flow.py --file "$f" --project-path "$TARGET/marts"
 done
-python scripts/run_layer.py --manifest <session>/reports/publish-manifest.json --layer marts
+python scripts/run_layer.py --manifest $MANIFEST --layer marts
 ```
 
-`run_layer.py` は manifest の対象レイヤから `publish=published` && `run!=success` の全件を拾うので、rpt の追加 publish 後の 2 回目呼び出しでは未 run の rpt のみが選択される。
+`run_layer.py` は manifest の対象レイヤから `publish=published` && `run!=success` の全件を拾うので、rpt の追加 publish 後の 2 回目呼び出しでは未 run の rpt のみが選択される。`auto_patch_downstream.py` は idempotent なので各レイヤ完走後に毎回呼んで OK (同じ dbname の re-patch は no-op)。
 
 スクリプトは常に非対話で動き、各レイヤ完走を確認してから次レイヤへ進む (依存関係上のゲートであって承認ゲートではない、[autonomous-execution-policy.md](autonomous-execution-policy.md) 参照)。失敗時の自律対処は [autonomous-recovery.md](autonomous-recovery.md)。
 

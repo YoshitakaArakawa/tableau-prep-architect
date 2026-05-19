@@ -8,6 +8,12 @@ published). After the upstream layer's publish + run completes, this script
 queries the Metadata API and patches the downstream .tfl(s) via
 `flow_io.patch_pds_dbname`.
 
+For the common case (patch every downstream .tfl using session-manifest run
+state in one shot), use `auto_patch_downstream.py` instead — it covers
+multiple (PDS x .tfl) pairs per invocation and is idempotent. Use this
+script when you want to inspect a single PDS's dbname candidates or patch a
+single .tfl in isolation (debug / one-off).
+
 Usage:
 
     python discover_pds_dbname.py --datasource-name stg_transactions \\
