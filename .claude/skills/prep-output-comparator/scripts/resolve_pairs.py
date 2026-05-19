@@ -5,7 +5,7 @@ Reads work/<session>/reports/publish-manifest.json (written by prep-builder and
 enriched by prep-deployer) and emits a pairs.json that prep-output-comparator's
 fork agent consumes to drive schema + row-count comparisons.
 
-The manifest is the source of truth for both the original ↔ decomposed name
+The manifest is the source of truth for both the original-to-decomposed name
 mapping (decomposed_flows[].source_original_output_name) and the PDS LUIDs.
 This script does not contact the Metadata API — if LUIDs are missing, it errors
 out asking the caller to run `publish_manifest.py resolve-luids` first.

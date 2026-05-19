@@ -25,7 +25,7 @@ allowed-tools: Read Write Bash(python *) Glob Grep
 
 ペア対応・LUID 解決はすべて manifest から取得する。caller が **個別の LUID 配列やペア順を組み立てる必要はない**。manifest の `decomposed_flows[].source_original_output_name` が原 PDS との対応の source of truth。
 
-key_columns / measure_columns / split_dimension の指定は受け付けない (auto-detect の沼を避けるため)。
+key_columns / measure_columns / split_dimension の指定は受け付けない (自動選択は業務知識なしには信頼できないため、本 Skill のスコープから外す)。
 
 ## 出力
 

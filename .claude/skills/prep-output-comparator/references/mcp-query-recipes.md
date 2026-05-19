@@ -1,7 +1,7 @@
 ---
 purpose: Tableau MCP (list-datasources / get-datasource-metadata / query-datasource) を prep-output-comparator から叩く際の癖と回避策
 fetched_at: 2026-05-19
-note: 本 Skill v1 が実際に発行する MCP 呼び出し (get-datasource-metadata と全体行数 COUNT) に必要なレシピのみ。MCP 全般の API ドキュメント代わりではなく、本 Skill が引っかかった落とし穴のみを記載
+note: 本 Skill が実際に発行する MCP 呼び出し (get-datasource-metadata と全体行数 COUNT) に必要なレシピのみ。MCP 全般の API ドキュメント代わりではなく、本 Skill が引っかかった落とし穴のみを記載
 ---
 
 # MCP Query Recipes
@@ -81,7 +81,7 @@ list-datasources filter=name:in:fct_transactions_summary,fct_transactions_matche
 { "fieldCaption": "銘柄", "function": "COUNT", "fieldAlias": "row_count" }
 ```
 
-`function` に取れる値: `SUM`, `AVG`, `MEDIAN`, `COUNT`, `COUNTD`, `MIN`, `MAX`, `STDEV`, `VAR`, `COLLECT`, `YEAR`, `QUARTER`, `MONTH`, `WEEK`, `DAY`, `TRUNC_YEAR` 系, `AGG`, `NONE`, `UNSPECIFIED`。本 Skill が v1 で使うのは `COUNT` のみ。
+`function` に取れる値: `SUM`, `AVG`, `MEDIAN`, `COUNT`, `COUNTD`, `MIN`, `MAX`, `STDEV`, `VAR`, `COLLECT`, `YEAR`, `QUARTER`, `MONTH`, `WEEK`, `DAY`, `TRUNC_YEAR` 系, `AGG`, `NONE`, `UNSPECIFIED`。本 Skill が実際に使うのは `COUNT` のみ。
 
 ## 全体行数を取るレシピ
 
