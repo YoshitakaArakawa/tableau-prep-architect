@@ -18,7 +18,7 @@ note: 各レイヤの「やる/やらない」、レイヤ判定の決定木、a
 | 列リネーム | ビジネスロジック・計算ルール |
 | 最低限のクレンジング（NULL 処理、明らかな欠損補完） | 集約 |
 | Tableau の Input ノード（**仮想接続 / Published DS** が前提、[input-policy](input-policy.md)） | 他レイヤへの直接依存 |
-| 中間 Hyper への出力 or stg_published Data Source 化 | — |
+| **Published DS への出力 (全レイヤ統一、`stg_*` 名で publish)** — 下流 intermediate が PDS として参照する。Cloud では flow 間 chain は PDS 経由が前提で、Hyper file 出力は cross-flow 共有不可 | 中間 Hyper のみで止める運用 |
 
 **目安**: 1 stg .tfl は **ノード 5〜15 個**。これを超えるなら staging の責務を逸脱している。
 
@@ -27,8 +27,9 @@ note: 各レイヤの「やる/やらない」、レイヤ判定の決定木、a
 | やる | やらない |
 |---|---|
 | staging 同士の JOIN | 1 ソースだけの整形（staging の責務） |
-| ビジネスロジック（売上区分、有効/無効判定、フラグ生成） | 最終出力（外部 publish しない、Hyper 中間が基本） |
+| ビジネスロジック（売上区分、有効/無効判定、フラグ生成） | BI が直接読む最終出力（最終 BI 公開は marts の責務） |
 | 前処理集約（marts より細かい粒度の集約も含む） | fct × dim の最終結合（marts では別 .tfl / 別 Published DS に保つ） |
+| **Published DS への出力 (`int_*` 名で publish)** — 下流 marts が PDS として参照する | 中間 Hyper のみで止める運用 |
 | ピボット / アンピボット | — |
 | Python / R ステップ | — |
 

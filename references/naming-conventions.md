@@ -112,15 +112,17 @@ staging: order_id, customer_id, total_amount
 marts:   Order ID, Customer ID, Total Amount
 ```
 
-## 中間 Hyper ファイル名
+## Published DS 名
 
-intermediate 連鎖で使う中間 Hyper は生成元 .tfl と同名:
+各 .tfl の Output (Published DS) 名は **.tfl 名と同じ** (拡張子なし) を default 規約とする:
 
 ```
-int_orders_step1_filter.tfl
-  → 出力: int_orders_step1_filter.hyper
-  → 次段の Input: int_orders_step1_filter.hyper
+stg_orders.tfl       → Published DS: stg_orders
+int_orders_enriched.tfl → Published DS: int_orders_enriched
+fct_sales.tfl        → Published DS: fct_sales
 ```
+
+例外: 同一 .tfl 内で複数 PublishExtract ノードを持ち別 PDS 名にしたい場合は decomposition-plan の Output mapping で別名を明示 ([decomposition-plan-format.md](decomposition-plan-format.md))。
 
 ## アンチパターン
 

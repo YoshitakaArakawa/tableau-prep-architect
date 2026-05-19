@@ -103,10 +103,10 @@ CLI は repo 直下 [scripts/publish_manifest.py](../scripts/publish_manifest.py
 | `name` | string | ✅ | .tfl ファイル名 (拡張子なし) = flow 名 = PDS 名 (本リポ規約) |
 | `layer` | string | ✅ | `staging` / `intermediate` / `marts` |
 | `tfl_path` | string | ✅ | `session_work_dir` からの相対パス (例: `flows/marts/<name>.tfl`) |
-| `source_original_output_name` | string \| null | ✅ | 元フローのどの output PDS に対応するか。marts レイヤの output flow のみ非 null、stg/int (Hyper のみ) は null |
+| `source_original_output_name` | string \| null | ✅ | 元フローのどの output PDS に対応するか。元フローの output と対応関係のある flow (通常は marts、元が intermediate 相当の PDS を直接出していたケースは int も) は非 null、分解で新規生成された flow (stg / 中間 PDS) は null |
 | `publish` | object | ✅ | 後述 |
 | `run` | object | ✅ | 後述 |
-| `outputs` | array of {`name`, `luid`} | ✅ | この flow の PublishExtract 出力 (init 時 flow.json から抽出、複数あり得る)。Hyper のみの flow なら空配列。`luid` は `resolve-luids` で埋まる |
+| `outputs` | array of {`name`, `luid`} | ✅ | この flow の PublishExtract 出力 (init 時 flow.json から抽出、複数あり得る)。**全レイヤ Published DS を出力する前提**のため通常 1 件以上 (空配列は想定外)。`luid` は `resolve-luids` で埋まる |
 
 ### `decomposed_flows[].publish`
 
@@ -156,7 +156,7 @@ prep-architect の decomposition-plan-<flow>.md に **必須セクション** `#
 ```
 
 - 元 PDS が複数の decomposed flow に分かれる場合は 1 元 PDS = 複数行で表現
-- 元 PDS と対応関係が無い stg/int flow は本表に出さない (`source_original_output_name = null` で manifest に登録)
+- 元 PDS と対応関係が無い flow (分解で新規生成された stg / 中間 PDS) は本表に出さない (`source_original_output_name = null` で manifest に登録される)
 - 表の `Decomposed output PDS` は publish 後の PDS 名で、`Decomposed flow` の flow 名と一致するのが本リポ規約だが、別名にしたい場合は両方記載 (`outputs[].name` に転記される)
 
 ## 後方互換性

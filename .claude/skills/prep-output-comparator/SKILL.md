@@ -57,7 +57,7 @@ python .claude/skills/prep-output-comparator/scripts/resolve_pairs.py \
 
 `<output_dir>` は典型的には `work/<yyyymmdd>_<tag>/reports/`。
 
-スクリプトは manifest の `decomposed_flows[].source_original_output_name` を見て、対応する原 output PDS とのペアを組み、`original` / `new` 双方の LUID を manifest から引いて `pairs.json` に書き出す。`source_original_output_name = null` の decomposed flow (stg/int の Hyper のみ flow) はペア対象外で skip する。
+スクリプトは manifest の `decomposed_flows[].source_original_output_name` を見て、対応する原 output PDS とのペアを組み、`original` / `new` 双方の LUID を manifest から引いて `pairs.json` に書き出す。`source_original_output_name = null` の decomposed flow (分解で新規生成された stg / 中間 PDS で、元フローの output と対応関係がない flow) はペア対象外で skip する。全層 PDS publish の前提でも、ペア対象は「元フローの output と対応する flow」に限定される。
 
 manifest に LUID が null のまま残っているフィールドがあればエラーで止まる (prep-deployer の `resolve-luids` が未実行)。Metadata API への新規問い合わせは本スクリプトでは行わない (manifest が source of truth)。
 

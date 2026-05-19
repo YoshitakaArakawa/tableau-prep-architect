@@ -43,7 +43,7 @@ note: 必須セクション (Summary / New .tfl files / Actions-level splits / O
   - stg: 3 個（salesforce__opportunities, snowflake__orders, snowflake__customers）
   - int: 2 個（entity 別: orders, customer — 各 1 .tfl にまとめる）
   - marts: 3 個（fct 1 + dim 1 + rpt 1）
-- 推奨 publish 粒度: marts のみ（stg/int は中間 Hyper）
+- publish 粒度: **全層 (stg/int/marts) を Published DS として publish**。下流レイヤは上流レイヤの PDS を Input として参照 (Cloud では flow 間 chain は PDS 経由が前提、Hyper file 出力は cross-flow 共有不可)
 ```
 
 ### New .tfl files
@@ -59,8 +59,9 @@ note: 必須セクション (Summary / New .tfl files / Actions-level splits / O
 - **Inputs**:
   - Source: `vc_salesforce` (仮想接続) / `Opportunity` テーブル
 - **Outputs**:
-  - Type: Hyper（中間）
-  - Path: `flows/staging/stg_salesforce__opportunities.hyper`
+  - Type: Published Data Source
+  - Name: `stg_salesforce__opportunities`
+  - Target project: `Sales Analytics/stg` (publish 先は [project-hierarchy.md](project-hierarchy.md))
 - **Included original steps**: 1, 2, 3
 - **Upstream lineage** (REQUIRED — each step must be Prev-reachable from one of the Inputs above):
   | Included step | Reachable from Input | Source Prev chain |
@@ -79,10 +80,12 @@ note: 必須セクション (Summary / New .tfl files / Actions-level splits / O
 
 - **Layer**: intermediate
 - **Inputs**:
-  - `stg_snowflake__orders.hyper`
-  - `stg_salesforce__opportunities.hyper`
+  - Published DS: `stg_snowflake__orders`
+  - Published DS: `stg_salesforce__opportunities`
 - **Outputs**:
-  - `int_orders_enriched.hyper`
+  - Type: Published Data Source
+  - Name: `int_orders_enriched`
+  - Target project: `Sales Analytics/intermediate`
 - **Joins**:
   - #9 SuperJoin orders × opps: cardinality `N:1` (各 order に対し対応する opp は 1 件)
 - **Included original steps**: 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20
@@ -99,9 +102,11 @@ note: 必須セクション (Summary / New .tfl files / Actions-level splits / O
 
 - **Layer**: intermediate
 - **Inputs**:
-  - `stg_snowflake__customers.hyper`
+  - Published DS: `stg_snowflake__customers`
 - **Outputs**:
-  - `int_customer_classified.hyper`
+  - Type: Published Data Source
+  - Name: `int_customer_classified`
+  - Target project: `Sales Analytics/intermediate`
 - **Included original steps**: 21, 22, 23, 24
 - **Description**:
   customer entity の分類ロジック（LTV ランク・セグメント判定）。dim_customer の素材となる。
@@ -110,7 +115,7 @@ note: 必須セクション (Summary / New .tfl files / Actions-level splits / O
 
 - **Layer**: marts
 - **Inputs**:
-  - `int_orders_enriched.hyper`
+  - Published DS: `int_orders_enriched`
 - **Outputs**:
   - Type: Published Data Source
   - Name: `fct_sales`
@@ -121,7 +126,7 @@ note: 必須セクション (Summary / New .tfl files / Actions-level splits / O
 
 ### dim_customer
 
-[同じ書式で続く。Inputs: `int_customer_classified.hyper`]
+[同じ書式で続く。Inputs: Published DS `int_customer_classified` / Outputs: Published DS `dim_customer` / Target project: `Sales Analytics/marts`]
 
 ### rpt_sales_with_customer
 
@@ -193,7 +198,7 @@ prep-builder の build 開始前に [`scripts/flow_io.py`](../scripts/flow_io.py
 
 ### Output mapping (original → decomposed)
 
-機械可読の名前対応表。元フローの output PDS と分解後フローの output PDS を 1 行 1 ペアで列挙する。**marts レイヤの分解 flow のみ** 行を持つ (stg/int は中間 Hyper で出力 PDS を持たないため記載しない)。1 元 PDS → 複数 marts への fan-out があれば複数行で表現する。
+機械可読の名前対応表。元フローの output PDS と、それを引き継ぐ分解後 flow の output PDS を 1 行 1 ペアで列挙する。**元フローの output と対応関係のある分解後 flow のみ** 行を持つ (通常は marts レイヤ、ただし元フローが intermediate 相当の PDS を直接出力していた場合はその対応も記載)。**元フローに対応 output が無い分解後 flow (新規生成された stg/int の中間 PDS 等)** は本表に出さず、publish-manifest 上で `source_original_output_name = null` として登録される。1 元 PDS → 複数 marts への fan-out があれば複数行で表現する。
 
 ```markdown
 ## Output mapping (original → decomposed)
@@ -225,8 +230,8 @@ Parent project: `Sales Analytics`（ユーザー指定、要事前作成）
 
 | Subproject | Contains (.tfl) | Published DS | Permissions (推奨) |
 |---|---|---|---|
-| `stg` | stg_salesforce__opportunities, stg_snowflake__orders | (なし、中間 Hyper のみ) | ETL team: Editor / Others: Viewer |
-| `intermediate` | int_orders_enriched, int_customer_classified | (なし、中間 Hyper のみ) | ETL team: Editor / Others: None |
+| `stg` | stg_salesforce__opportunities, stg_snowflake__orders | stg_salesforce__opportunities, stg_snowflake__orders | ETL team: Editor / Others: Viewer |
+| `intermediate` | int_orders_enriched, int_customer_classified | int_orders_enriched, int_customer_classified | ETL team: Editor / Others: None |
 | `marts` | fct_sales, dim_customer, rpt_sales_with_customer | fct_sales, dim_customer, rpt_sales_with_customer | BI team: Editor / Wide: Viewer |
 
 Project creation commands（`prep-deployer` で実行）:

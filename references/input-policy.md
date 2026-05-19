@@ -30,4 +30,4 @@ dbt の `sources` 概念に相当。
 | 仮想接続経由 | `LoadSql` で `connectionType=tableau-server` 等 | ✅ Compliant |
 | 生 DB 接続（Snowflake / Postgres など直結） | `LoadSql` で具体的な DB host を指す connection | ❌ 違反、仮想接続化を提案 |
 | ローカル CSV / Excel | `LoadCsv` / `LoadExcel` | △ PoC は許容、本番では DB 経由を提案 |
-| Hyper（中間生成） | `LoadHyper` | レイヤ連鎖の中間入力、本ポリシーの対象外 |
+| Hyper（中間生成） | `LoadHyper` | 本リポでは cross-layer 連鎖に **使わない** (全層 Published DS publish が前提、cross-layer Input は `LoadSqlProxy` 経由で上流レイヤの PDS を読む)。Prep Builder GUI での単体検証用のローカル Hyper のみが対象 |
