@@ -20,11 +20,10 @@ allowed-tools: Read Write Bash(python *) Glob Grep
 
 | 入力 | 必須 | 例 |
 |---|---|---|
-| `original_flow_luid` | ✅ | 元フローの LUID (1 個) |
-| `new_flow_luids` | ✅ | 分解後フロー群の LUID 配列 (marts レイヤの .tfl)。**配列の順序が出力 PDS のペア順 (index pairing) になる**。Metadata API が原フローの outputSteps を返す順序とペアが一致しないとペアが意味的に逆転する。caller は decomposition-plan の名前対応を見て、原フローの output 順と一致するように並べて渡す責務がある |
+| `manifest_path` | ✅ | session の `publish-manifest.json` のパス (典型: `work/<yyyymmdd>_<tag>/reports/publish-manifest.json`)。prep-deployer が `resolve-luids` まで完了した状態を前提とする。形式は [../../../references/publish-manifest-format.md](../../../references/publish-manifest-format.md) |
 | `output_dir` | ✅ | レポート出力先 (典型: `work/<yyyymmdd>_<tag>/reports/`)。MD は [CLAUDE.md §work/ ディレクトリ規約](../../../CLAUDE.md#work-ディレクトリ規約) の `reports/` に集約 |
 
-flow LUID から output PDS への解決は本 Skill 内で行う ([scripts/resolve_pairs.py](scripts/resolve_pairs.py))。caller は **flow LUID だけ渡せばよく、PDS LUID を事前に解決する必要はない**。
+ペア対応・LUID 解決はすべて manifest から取得する。caller が **個別の LUID 配列やペア順を組み立てる必要はない**。manifest の `decomposed_flows[].source_original_output_name` が原 PDS との対応の source of truth。
 
 key_columns / measure_columns / split_dimension の指定は受け付けない (auto-detect の沼を避けるため)。
 
@@ -52,16 +51,15 @@ key_columns / measure_columns / split_dimension の指定は受け付けない (
 
 ```bash
 python .claude/skills/prep-output-comparator/scripts/resolve_pairs.py \
-  --original-flow-luid <luid> \
-  --new-flow-luids <luid1> <luid2> ... \
+  --manifest <manifest_path> \
   --output <output_dir>/pairs.json
 ```
 
 `<output_dir>` は典型的には `work/<yyyymmdd>_<tag>/reports/`。
 
-スクリプトは Tableau Metadata API (GraphQL) で各 flow の `downstreamDatasources` を辿り、新フロー群の output PDS を順次列挙する。元フローの出力 N 個と新フローの出力 N 個を **同じインデックス順** で並べたペアリストを `pairs.json` に書き出す。
+スクリプトは manifest の `decomposed_flows[].source_original_output_name` を見て、対応する原 output PDS とのペアを組み、`original` / `new` 双方の LUID を manifest から引いて `pairs.json` に書き出す。`source_original_output_name = null` の decomposed flow (stg/int の Hyper のみ flow) はペア対象外で skip する。
 
-**Caller 責務 (重要):** Metadata API が返す原フローの output 順と caller が渡した `new_flow_luids` の順序が一致していない場合、index pairing でペアが意味的に逆転する。caller は decomposition-plan の名前対応を読んで、原フローの output 順に合うように `new_flow_luids` を並べる責務がある。Skill 側では名前類似度による自動マッチは行わない (auto-detect の罠を避けるため)。元フローの output 数と渡された新フローの output 合計数が一致しない場合は警告のみ出して短い方で打ち切る。
+manifest に LUID が null のまま残っているフィールドがあればエラーで止まる (prep-deployer の `resolve-luids` が未実行)。Metadata API への新規問い合わせは本スクリプトでは行わない (manifest が source of truth)。
 
 ### Step 2: スキーマ比較
 
@@ -123,6 +121,7 @@ dimension 列の選び方は [references/mcp-query-recipes.md](references/mcp-qu
 
 よくある失敗パターン:
 
-- Metadata API: 該当 flow に downstreamDatasources がない / publishedDatasource ではなく Hyper 出力 → ペア解決不能。caller に「対象 flow が PDS を publish しているか確認してください」と返す
+- manifest が null LUID を含む: prep-deployer の `resolve-luids` が未実行。caller に「`python scripts/publish_manifest.py resolve-luids --manifest ...` を先に実行してください」と返す
+- manifest に `source_original_output_name` を持つ decomposed flow が 0 件: marts レイヤの公開対象が無い (= decomposition-plan の Output mapping が空)。caller に decomposition-plan の Output mapping セクションを確認するよう案内
 - MCP 401: 並列叩きで発生。sequential に切り替えれば解消 ([references/mcp-query-recipes.md](references/mcp-query-recipes.md))
 - query-datasource: フィールド caption が一致しない (内部 ID と caption の混同) → スキーマから取った name をそのまま渡す

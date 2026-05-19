@@ -18,6 +18,7 @@ note: 必須セクション (Summary / New .tfl files / Actions-level splits / T
 ## Summary
 ## New .tfl files
 ## Actions-level splits
+## Output mapping (original → decomposed)
 ## Target Tableau Cloud project layout
 ## Dependency DAG (Mermaid)
 ## Migration order
@@ -174,6 +175,29 @@ prep-builder の build 開始前に [`scripts/flow_io.py`](../scripts/flow_io.py
 - **削除候補ノードも明示**: actions=0 の空ノード（例: Clean 13）は分割対象ではなく削除対象
 ```
 
+### Output mapping (original → decomposed)
+
+機械可読の名前対応表。元フローの output PDS と分解後フローの output PDS を 1 行 1 ペアで列挙する。**marts レイヤの分解 flow のみ** 行を持つ (stg/int は中間 Hyper で出力 PDS を持たないため記載しない)。1 元 PDS → 複数 marts への fan-out があれば複数行で表現する。
+
+```markdown
+## Output mapping (original → decomposed)
+
+| Original output PDS | Decomposed flow | Decomposed output PDS |
+|---|---|---|
+| stockmarket_transaction_prepped | fct_transactions_summary | fct_transactions_summary |
+| stockmarket_transaction_detailed_prepped | fct_transactions_matched | fct_transactions_matched |
+```
+
+列の意味:
+
+- `Original output PDS`: 元フローの PublishExtract Output ノードが書き出している PDS 名 (flow-summary.md `Meta` の `Outputs:` リストと一致)
+- `Decomposed flow`: 分解後 .tfl の名前 (拡張子なし)。`## New .tfl files` 配下のセクション名と一致
+- `Decomposed output PDS`: その flow が publish する PDS 名。本リポ規約では flow 名と同名
+
+**用途**: [prep-builder](../.claude/skills/prep-builder/SKILL.md) が build 完了時に [scripts/publish_manifest.py init](../scripts/publish_manifest.py) でパースして `decomposed_flows[].source_original_output_name` に転記する。最終的に [prep-output-comparator](../.claude/skills/prep-output-comparator/SKILL.md) のペア解決で参照される (本表が欠けると `auto-detect 禁止` の方針で comparator がペアを組めない)。
+
+書式契約は [publish-manifest-format.md](publish-manifest-format.md) と一体。
+
 ### Target Tableau Cloud project layout
 
 実装側の階層仕様は [project-hierarchy.md](project-hierarchy.md) 参照。
@@ -277,6 +301,7 @@ graph TD
 |---|---|
 | `New .tfl files` | prep-builder が .tfl を生成するために必須 |
 | `Actions-level splits` | prep-builder が 1 SuperTransform を複数 .tfl に分けるときの指示書（`beforeActionAnnotations` の振り分け） |
+| `Output mapping (original → decomposed)` | prep-builder が build 完了時に `publish_manifest.py init` で読み取り、prep-output-comparator のペア解決に最終的に使う ([publish-manifest-format.md](publish-manifest-format.md)) |
 | `Target Tableau Cloud project layout` | `prep-deployer` が `create_projects.py` を呼ぶときに参照 |
 | `Dependency DAG` | publish 順序の決定 |
 | `Migration order` | ユーザー向けの段階移行ガイド |

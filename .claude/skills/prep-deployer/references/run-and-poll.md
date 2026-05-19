@@ -141,6 +141,37 @@ python run_flow.py --flow-name "int_orders_enriched" && \
 python run_flow.py --flow-name "fct_sales"
 ```
 
+## run 後の manifest 更新
+
+各 run の `finishCode` を受け取ったら、[scripts/publish_manifest.py update-run](../../../../scripts/publish_manifest.py) で session manifest を更新する:
+
+```bash
+python scripts/publish_manifest.py update-run \
+  --manifest <session>/reports/publish-manifest.json \
+  --flow-name <decomposed_flow_name> \
+  --finish-code <0|1|2>
+```
+
+finishCode から `run.status` (`success` / `failed`) はスクリプトが自動決定する。
+
+## 全レイヤ完走後の resolve-luids
+
+最後の marts レイヤまで run が完了したら、[scripts/publish_manifest.py resolve-luids](../../../../scripts/publish_manifest.py) を 1 回だけ呼んで manifest に残った null LUID を埋める:
+
+```bash
+python scripts/publish_manifest.py resolve-luids \
+  --manifest <session>/reports/publish-manifest.json
+```
+
+このコマンドが解決するもの:
+
+- `original.flow_luid` (init 時に null だった場合、flow_name から逆引き)
+- `original.outputs[].luid` (Metadata API の `downstreamDatasources` から)
+- `decomposed_flows[].publish.flow_luid` (update-publish で既に入っていれば skip)
+- `decomposed_flows[].outputs[].luid` (Metadata API)
+
+LUID が揃った manifest は [prep-output-comparator](../../prep-output-comparator/SKILL.md) がそのまま消費する。manifest 形式は [../../../../references/publish-manifest-format.md](../../../../references/publish-manifest-format.md)。
+
 ## REST API バージョン
 
 `POST /flows/{id}/run` は REST API 3.3+ で利用可能。`use_server_version=True` を TSC で指定すれば自動追従する。

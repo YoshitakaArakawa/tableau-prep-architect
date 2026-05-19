@@ -23,19 +23,25 @@
 prep-extractor ─ flow-extract   .tfl/.tflx → flow-summary.md（構造抽出）
         ↓
 prep-architect ─ analyze        現状把握 → analysis-<flow>.md
-prep-architect ─ decompose      分解設計 → decomposition-plan-<flow>.md（deploy-context があれば名前衝突も加味）
+prep-architect ─ decompose      分解設計 → decomposition-plan-<flow>.md（deploy-context があれば名前衝突も加味、
+                                必須セクション ## Output mapping (original → decomposed) 含む）
         ↓
 prep-builder ─ build            .tfl 群を生成（元 .tfl の maestroMetadata / displaySettings を同梱）
+                                → publish_manifest.py init で publish-manifest.json を新規作成
         ↓
 prep-deployer ─ publish + run   レイヤ単位 (stg → int → marts) で publish → run → finishCode=0 確認
                                 同レイヤ内は並列可、レイヤ間は順次
+                                publish/run の各完了で publish_manifest.py update-publish / update-run
+                                全レイヤ完走後に publish_manifest.py resolve-luids で LUID 解決
         ↓
-prep-output-comparator ─ compare  元と分解後の最終 PDS を Metadata API + Tableau MCP で
+prep-output-comparator ─ compare  manifest を入力に Metadata API + Tableau MCP で
                                   列差分 + 全体行数差分のみ比較 → Markdown
                                   (原因分析・修正提案・値同値性は持たない)
         ↓
 prep-deployer ─ test (将来)      VDS でデータ品質テスト
 ```
+
+session manifest (`publish-manifest.json`) は 1 セッションの **元フロー LUID / 元 output PDS LUID / 分解後フローの publish & run 状態 / 分解後 output PDS LUID** をまとめた単一 JSON。形式は [references/publish-manifest-format.md](references/publish-manifest-format.md)、書き込みは prep-builder (init) + prep-deployer (update / resolve-luids)、読み取りは prep-output-comparator。
 
 publish 先構造のモデル (target = stg/int/marts の直上、上位は任意の深さ・命名) と path 自然言語解釈の責任分離は [prep-extractor SKILL.md](.claude/skills/prep-extractor/SKILL.md) 参照。step 0a / 0b は最初に一度走らせれば良く、その後の analyze / decompose / build を反復するときは `deploy-context.md` を再利用する。
 
@@ -93,7 +99,7 @@ work/<yyyymmdd>_<tag>/
 
 | サブフォルダ | 入れるもの | 入れないもの |
 |---|---|---|
-| `reports/` | prep-extractor の `flow-summary.md` / `deploy-context.md`、prep-architect の `analysis-*.md` / `decomposition-plan-*.md`、prep-output-comparator の `comparison-report.md` / `pairs.json` | スクリプト、.tfl |
+| `reports/` | prep-extractor の `flow-summary.md` / `deploy-context.md`、prep-architect の `analysis-*.md` / `decomposition-plan-*.md`、prep-builder/deployer の `publish-manifest.json`、prep-output-comparator の `comparison-report.md` / `pairs.json` | スクリプト、.tfl |
 | `flows/` | prep-builder の `staging/*.tfl` / `intermediate/*.tfl` / `marts/*.tfl` | レポート、試行錯誤の .tfl |
 | `scripts/` | **公式の再生成スクリプト** (例: `build_tfls.py` — このセッションの .tfl 群を再ビルドできるもの)。冪等で再実行可能 | 1 回限りの修正試行・実験 |
 | `scratch/` | 試行錯誤・使い捨ての py / メモ (例: `patch_target_path.py`, `fix_failures.py`, 検証用 `regression_test_*.py`) | 後段の Skill が依存するスクリプト |

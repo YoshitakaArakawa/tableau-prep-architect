@@ -53,6 +53,29 @@ publish に進む前に確認すべき項目：
 
 `rpt_*` は fct/dim の Published DS を Input として読むので必ず最後。スケジュール実行 (本番運用) では Tableau の Linked Tasks で fct/dim → rpt の連鎖を組む。
 
+## publish 後の manifest 更新
+
+各 .tfl の publish が成功 (HTTP 201) するたびに、戻り値の flow LUID を控えて [scripts/publish_manifest.py update-publish](../../../../scripts/publish_manifest.py) で session manifest を更新する:
+
+```bash
+python scripts/publish_manifest.py update-publish \
+  --manifest <session>/reports/publish-manifest.json \
+  --flow-name <decomposed_flow_name> \
+  --status published \
+  --flow-luid <luid>
+```
+
+publish が失敗 (HTTP 4xx/5xx でリトライ尽きた状態) なら:
+
+```bash
+python scripts/publish_manifest.py update-publish \
+  --manifest <session>/reports/publish-manifest.json \
+  --flow-name <decomposed_flow_name> \
+  --status failed
+```
+
+`status=failed` の場合は `--flow-luid` 不要。manifest 形式は [../../../../references/publish-manifest-format.md](../../../../references/publish-manifest-format.md)。
+
 ## `publish_flow.py` の使い方
 
 ```bash

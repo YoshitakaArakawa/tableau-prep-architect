@@ -1,25 +1,17 @@
-"""Resolve original ↔ new published-datasource pairs via Tableau Metadata API.
+#!/usr/bin/env python3
+"""Resolve original <-> new published-datasource pairs from a session manifest.
 
-Given:
-  - original flow LUID (1 flow that the new flows are decomposed from)
-  - new flow LUIDs (typically the marts-layer .tfl flows after decomposition)
+Reads work/<session>/reports/publish-manifest.json (written by prep-builder and
+enriched by prep-deployer) and emits a pairs.json that prep-output-comparator's
+fork agent consumes to drive schema + row-count comparisons.
 
-Looks up each flow's downstream published datasources via the Metadata API
-(GraphQL) and writes a pairs.json with the original outputs paired against
-the flattened new outputs (paired by position).
+The manifest is the source of truth for both the original ↔ decomposed name
+mapping (decomposed_flows[].source_original_output_name) and the PDS LUIDs.
+This script does not contact the Metadata API — if LUIDs are missing, it errors
+out asking the caller to run `publish_manifest.py resolve-luids` first.
 
 Usage:
-
-    python resolve_pairs.py \
-        --original-flow-luid <luid> \
-        --new-flow-luids <luid1> <luid2> ... \
-        --output <output_dir>/pairs.json
-
-Failure modes:
-  - Original or new flow not found → exits with error
-  - Flow has zero downstream datasources → reported as warning, written to JSON
-  - Original output count != new flattened output count → warning, still pairs
-    by index for the shorter length
+    python resolve_pairs.py --manifest <path> --output <output_dir>/pairs.json
 """
 
 from __future__ import annotations
@@ -31,145 +23,141 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
 
-# This file lives at .claude/skills/prep-output-comparator/scripts/resolve_pairs.py
-# → parents[4] is the repo root (4 levels up: scripts → prep-output-comparator → skills → .claude → repo)
-REPO_ROOT = Path(__file__).resolve().parents[4]
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
-
-from tableau_auth import sign_in_server  # noqa: E402
-
-
-# Metadata API uses "publishedDatasources" with upstreamFlows for reverse lookup.
-# Forward lookup from Flow → downstreamDatasources is the documented path.
-FLOW_OUTPUTS_QUERY = """
-query FlowDownstreamDatasources($luid: String!) {
-  flows(filter: { luid: $luid }) {
-    luid
-    name
-    downstreamDatasources {
-      luid
-      name
-      projectName
-    }
-  }
-}
-"""
-
-
-def query_flow_outputs(server, flow_luid: str) -> dict[str, Any]:
-    """Return the flow record with its downstream published datasources.
-
-    Returns a dict with keys: luid, name, downstreamDatasources (list).
-    """
-    result = server.metadata.query(
-        query=FLOW_OUTPUTS_QUERY,
-        variables={"luid": flow_luid},
-    )
-
-    if "errors" in result and result["errors"]:
-        msgs = "; ".join(e.get("message", "?") for e in result["errors"])
-        sys.exit(f"ERROR: Metadata API returned errors for flow {flow_luid}: {msgs}")
-
-    flows = result.get("data", {}).get("flows", [])
-    if not flows:
-        sys.exit(f"ERROR: No flow found with LUID: {flow_luid}")
-
-    return flows[0]
-
 
 def jst_now_iso() -> str:
     return datetime.now(timezone(timedelta(hours=9))).isoformat(timespec="seconds")
 
 
+def build_pairs(manifest: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
+    """Compose pair entries from manifest.
+
+    Returns (pairs, warnings). Each pair = {pair_index, original, new}.
+    """
+    warnings: list[str] = []
+
+    if not manifest["original"].get("flow_luid"):
+        warnings.append(
+            "original.flow_luid is null — run "
+            "`python scripts/publish_manifest.py resolve-luids` first"
+        )
+
+    # Build lookup: original output PDS name -> {luid}
+    orig_by_name: dict[str, dict[str, Any]] = {}
+    for o in manifest["original"].get("outputs") or []:
+        orig_by_name[o["name"]] = o
+
+    pairs: list[dict[str, Any]] = []
+    pair_idx = 0
+
+    for df in manifest.get("decomposed_flows") or []:
+        src_name = df.get("source_original_output_name")
+        if not src_name:
+            # stg/int Hyper-only flows are not part of parity comparison.
+            continue
+
+        orig = orig_by_name.get(src_name)
+        if orig is None:
+            warnings.append(
+                f"decomposed flow '{df['name']}' references "
+                f"source_original_output_name='{src_name}' not present in "
+                f"manifest.original.outputs"
+            )
+            continue
+
+        new_outs = df.get("outputs") or []
+        if not new_outs:
+            warnings.append(
+                f"decomposed flow '{df['name']}' has no PublishExtract outputs"
+            )
+            continue
+        if len(new_outs) > 1:
+            warnings.append(
+                f"decomposed flow '{df['name']}' has {len(new_outs)} outputs; "
+                "pairing with the first one only"
+            )
+        new_out = new_outs[0]
+
+        if not orig.get("luid"):
+            warnings.append(
+                f"original output PDS '{src_name}' has null LUID — "
+                "run resolve-luids on the manifest first"
+            )
+        if not new_out.get("luid"):
+            warnings.append(
+                f"decomposed output PDS '{new_out['name']}' "
+                f"(from flow '{df['name']}') has null LUID — "
+                "run resolve-luids on the manifest first"
+            )
+
+        pairs.append({
+            "pair_index": pair_idx,
+            "original": {
+                "luid": orig.get("luid"),
+                "name": orig["name"],
+            },
+            "new": {
+                "luid": new_out.get("luid"),
+                "name": new_out["name"],
+                "source_flow_luid": df["publish"].get("flow_luid"),
+                "source_flow_name": df["name"],
+            },
+        })
+        pair_idx += 1
+
+    return pairs, warnings
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--original-flow-luid", required=True,
-                        help="LUID of the original flow")
-    parser.add_argument("--new-flow-luids", required=True, nargs="+",
-                        help="LUIDs of the new decomposed flows (typically marts layer)")
+    parser.add_argument("--manifest", required=True,
+                        help="Path to publish-manifest.json")
     parser.add_argument("--output", required=True,
-                        help="Path to write the pairs.json")
+                        help="Path to write pairs.json")
     args = parser.parse_args()
 
+    manifest_path = Path(args.manifest)
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    server, auth = sign_in_server()
-    warnings: list[str] = []
+    if not manifest_path.is_file():
+        sys.exit(f"ERROR: manifest not found: {manifest_path}")
 
-    with server.auth.sign_in(auth):
-        # 1. Resolve original flow's outputs
-        orig_flow = query_flow_outputs(server, args.original_flow_luid)
-        original_outputs = orig_flow.get("downstreamDatasources") or []
-        if not original_outputs:
-            warnings.append(
-                f"Original flow '{orig_flow.get('name')}' ({args.original_flow_luid}) "
-                "has no downstream datasources"
-            )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
-        # 2. Resolve each new flow's outputs (sequential — avoids parallel auth races)
-        new_outputs_by_flow: dict[str, dict[str, Any]] = {}
-        for new_luid in args.new_flow_luids:
-            new_flow = query_flow_outputs(server, new_luid)
-            outs = new_flow.get("downstreamDatasources") or []
-            if not outs:
-                warnings.append(
-                    f"New flow '{new_flow.get('name')}' ({new_luid}) "
-                    "has no downstream datasources"
-                )
-            new_outputs_by_flow[new_luid] = {
-                "name": new_flow.get("name"),
-                "outputs": outs,
-            }
-
-    # 3. Flatten new outputs in the order new_flow_luids was given
-    flat_new: list[dict[str, Any]] = []
-    for new_luid in args.new_flow_luids:
-        for ds in new_outputs_by_flow[new_luid]["outputs"]:
-            flat_new.append({**ds, "source_flow_luid": new_luid})
-
-    # 4. Pair by index
-    if len(original_outputs) != len(flat_new):
-        warnings.append(
-            f"Output count mismatch: original={len(original_outputs)}, "
-            f"new(flattened)={len(flat_new)}. Pairing by index up to "
-            f"the shorter length ({min(len(original_outputs), len(flat_new))})."
-        )
-
-    pair_count = min(len(original_outputs), len(flat_new))
-    pairs = []
-    for i in range(pair_count):
-        orig = original_outputs[i]
-        new = flat_new[i]
-        pairs.append({
-            "pair_index": i,
-            "original": {
-                "luid": orig.get("luid"),
-                "name": orig.get("name"),
-                "project_name": orig.get("projectName"),
-            },
-            "new": {
-                "luid": new.get("luid"),
-                "name": new.get("name"),
-                "project_name": new.get("projectName"),
-                "source_flow_luid": new.get("source_flow_luid"),
-            },
-        })
+    pairs, warnings = build_pairs(manifest)
 
     payload = {
         "schema_version": "1",
         "generated_at": jst_now_iso(),
-        "original_flow_luid": args.original_flow_luid,
-        "new_flow_luids": args.new_flow_luids,
+        "manifest_path": str(manifest_path).replace("\\", "/"),
+        "original_flow_luid": manifest["original"].get("flow_luid"),
+        "original_flow_name": manifest["original"].get("flow_name"),
         "pairs": pairs,
         "warnings": warnings,
     }
 
     output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"[resolve_pairs] Wrote {pair_count} pair(s) to {output_path}", file=sys.stderr)
-    if warnings:
-        for w in warnings:
-            print(f"[resolve_pairs] WARNING: {w}", file=sys.stderr)
+    print(f"[resolve_pairs] Wrote {len(pairs)} pair(s) to {output_path}", file=sys.stderr)
+    for w in warnings:
+        print(f"[resolve_pairs] WARNING: {w}", file=sys.stderr)
+
+    # If any LUID is missing, exit non-zero so the fork agent stops rather than
+    # passing null LUIDs to MCP and getting cryptic errors downstream.
+    missing_luid = (
+        not payload["original_flow_luid"]
+        or any(
+            not p["original"]["luid"] or not p["new"]["luid"]
+            for p in pairs
+        )
+    )
+    if missing_luid:
+        print(
+            "[resolve_pairs] ERROR: one or more LUIDs are null in pairs.json. "
+            "Run `python scripts/publish_manifest.py resolve-luids "
+            f"--manifest {manifest_path}` and retry.",
+            file=sys.stderr,
+        )
+        return 1
 
     return 0
 

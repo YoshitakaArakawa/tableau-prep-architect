@@ -246,6 +246,30 @@ for path in generated_tfls:
 
 詳細な原理は decompose 側 [../../../../references/decomposition-plan-format.md](../../../../references/decomposition-plan-format.md) の Lineage closure invariant 節を参照。
 
+### Step 4.6: publish-manifest 初期化
+
+全 .tfl を書き出して検証を通したら、session manifest を初期化する:
+
+```bash
+python scripts/publish_manifest.py init \
+  --decomposition-plan <session>/reports/decomposition-plan-<flow>.md \
+  --flow-summary <session>/reports/flow-summary.md \
+  --flows-dir <session>/flows \
+  --output <session>/reports/publish-manifest.json \
+  --original-flow-luid <luid-if-known>
+```
+
+スクリプトの動作:
+
+- decomposition-plan の `## Output mapping (original → decomposed)` 表をパースして元 PDS と marts 新 flow の対応を取得
+- flow-summary.md から元フロー名と元 output PDS リストを抽出
+- `<session>/flows/{staging,intermediate,marts}/*.tfl` をスキャンして各 .tfl の PublishExtract output PDS を抽出
+- これらをマージして `publish-manifest.json` を `status="pending"` / `luid=null` で書き出す
+
+`--original-flow-luid` は session intake Q1 で確定していれば渡す。null でも `resolve-luids` フェーズ (prep-deployer 後段) で名前から逆引きされるので任意。
+
+manifest format は [../../../../references/publish-manifest-format.md](../../../../references/publish-manifest-format.md)。
+
 ### Step 5: サマリ出力
 
 ```markdown
