@@ -1,7 +1,7 @@
 ---
 purpose: prep-architect の decompose フェーズが出力する分解設計案の markdown 書式仕様
 fetched_at: 2026-05-17
-note: 必須セクション (Summary / New .tfl files / Actions-level splits / Target Tableau Cloud project layout / Dependency DAG / Migration order / Alternatives considered) と各セクションの書式・記述ルールを規定
+note: 必須セクション (Summary / New .tfl files / Actions-level splits / Output mapping / Target Tableau Cloud project layout / Dependency DAG / Migration order / Alternatives considered) と各セクションの書式・記述ルールを規定
 ---
 
 # decomposition-plan-format
