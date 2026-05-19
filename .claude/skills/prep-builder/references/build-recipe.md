@@ -110,10 +110,10 @@ lsp_id, _ = add_pds_input(
     new_flow,
     server_url=ctx["server_url"],
     site_url_name=ctx["site_url_name"],
-    project_name=ctx["layer_projects"]["stg"]["name"],          # 例 "99_Sandbox/.../stg"
-    datasource_name="stg_snowflake__orders",                    # 上流 flow 名 = PDS 名
+    project_name=ctx["layer_projects"]["stg"]["ds_project"]["name"],  # 上流 PDS は datasources 配下 (例 "99_Sandbox/.../datasources/stg")
+    datasource_name="stg_snowflake__orders",                          # 上流 flow 名 = PDS 名
     dbname=None,        # 上流 publish/run 完了後に prep-deployer が patch
-    fields=upstream_fields_if_known,                            # 不明なら []
+    fields=upstream_fields_if_known,                                  # 不明なら []
     next_nodes=None,    # ← 必ず None。エッジは下の wire_* で張る
 )
 
@@ -144,9 +144,9 @@ wire_new_input_to_child(
 
 実装パターン・保全ルール（順序保持、空ノード削除、リワイヤ）は [../../../../references/tfl-json-schema.md](../../../../references/tfl-json-schema.md#supertransform-を-actions-単位で分割) 参照。
 
-#### 3d. Output ノードの追加 (全レイヤ PublishExtract → layer project)
+#### 3d. Output ノードの追加 (全レイヤ PublishExtract → datasources/<layer> project)
 
-全レイヤで `PublishExtract` を採用し、その flow が置かれる layer project と同じ場所に PDS を書く (stg flow → `<target>/stg` / int → `<target>/intermediate` / marts → `<target>/marts`)。`WriteToHyper` (ローカル書き出し) は Cloud で下流から参照できないため使わない。
+全レイヤで `PublishExtract` を採用し、PDS は `<target>/datasources/<layer>` に書く (flow .tfl 自体の publish 先 `<target>/flows/<layer>` とは別プロジェクト、[project-hierarchy.md](../../../../references/project-hierarchy.md))。`WriteToHyper` (ローカル書き出し) は Cloud で下流から参照できないため使わない。
 
 [scripts/flow_io.py](../../../../scripts/flow_io.py) の `make_publish_extract_node` ヘルパ:
 
@@ -155,9 +155,9 @@ from flow_io import make_publish_extract_node
 
 layer = "stg"  # or "intermediate" / "marts"
 out_node = make_publish_extract_node(
-    project_name=ctx["layer_projects"][layer]["name"],   # 例 "99_Sandbox/.../stg"
-    project_luid=ctx["layer_projects"][layer]["luid"],   # preflight が作成、deploy-context.md に記載
-    datasource_name=new_flow_name,                       # flow 名 = PDS 名
+    project_name=ctx["layer_projects"][layer]["ds_project"]["name"],   # PDS publish 先 (例 "99_Sandbox/.../datasources/stg")
+    project_luid=ctx["layer_projects"][layer]["ds_project"]["luid"],   # 同上の LUID (preflight が作成、deploy-context.md に記載)
+    datasource_name=new_flow_name,                                     # flow 名 = PDS 名
     server_url=ctx["server_url"],
     site_url_name=ctx["site_url_name"],
 )
@@ -165,7 +165,16 @@ new_flow["nodes"][out_node["id"]] = out_node
 # 末端ノードの nextNodes に out_node の id を追加するのを忘れない
 ```
 
-`projectLuid` は publish 後の取り違え事故を避けるため必須。`deploy-context.md` の preflight 完了後に layer project の LUID が確定するので、build はそれを読んで使う。
+`projectLuid` は publish 後の取り違え事故を避けるため必須。`deploy-context.md` の preflight 完了後に datasources 配下の layer project LUID が確定するので、build はそれを読んで使う。
+
+ctx の `layer_projects` 構造:
+
+```python
+ctx["layer_projects"][layer] = {
+    "flow_project": {"name": "<target>/flows/<layer>",       "luid": "<flows-layer-luid>"},   # .tfl publish 先 (publish_flow.py が使う)
+    "ds_project":   {"name": "<target>/datasources/<layer>", "luid": "<datasources-layer-luid>"}, # PDS publish 先 (LSP Input & PublishExtract が使う)
+}
+```
 
 | 出力先 | nodeType（例） | 用途 |
 |---|---|---|
@@ -358,8 +367,9 @@ VConn 入力 stg flow の自動ハンドリングはスコープ外。複雑性 
 
 ## 設計上の前提
 
-- **cross-layer Input は LoadSqlProxy 一択** (Step 3b)。`add_pds_input` が Server 接続 / dataConnection / node を一括登録 + Server 接続を (server_url, site_url_name) で dedup
-- **全レイヤ Output は PublishExtract → 同レイヤ project** (Step 3d)。`projectLuid` は preflight 後の deploy-context.md から取得
+- **cross-layer Input は LoadSqlProxy 一択** (Step 3b)。`add_pds_input` が Server 接続 / dataConnection / node を一括登録 + Server 接続を (server_url, site_url_name) で dedup。`project_name` は上流レイヤの `ds_project` (= `<target>/datasources/<upstream-layer>`)
+- **全レイヤ Output は PublishExtract → `<target>/datasources/<layer>`** (Step 3d)。`projectLuid` は preflight 後の deploy-context.md から取得 (`ds_project.luid`)
+- **flow .tfl 本体の publish 先は `<target>/flows/<layer>`** で、PDS publish 先 (`<target>/datasources/<layer>`) とは別プロジェクト。publish_flow.py 呼び出し時の `--project-path` は `flow_project.name` を使う
 - **`dbname` は build 時 None で OK** (run 前に deployer 側で解決される契約)
 
 ## 検証順序 (レイヤ依存を踏まえた build/validate)

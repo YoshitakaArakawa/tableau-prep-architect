@@ -61,7 +61,7 @@ note: 必須セクション (Summary / New .tfl files / Actions-level splits / O
 - **Outputs**:
   - Type: Published Data Source
   - Name: `stg_salesforce__opportunities`
-  - Target project: `Sales Analytics/stg` (publish 先は [project-hierarchy.md](project-hierarchy.md))
+  - Target project: `Sales Analytics/datasources/stg` (PDS publish 先。flow .tfl 自体は `Sales Analytics/flows/stg` に publish される。flow と PDS が別プロジェクトになるレイアウトは [project-hierarchy.md](project-hierarchy.md))
 - **Included original steps**: 1, 2, 3
 - **Upstream lineage** (REQUIRED — each step must be Prev-reachable from one of the Inputs above):
   | Included step | Reachable from Input | Source Prev chain |
@@ -85,7 +85,7 @@ note: 必須セクション (Summary / New .tfl files / Actions-level splits / O
 - **Outputs**:
   - Type: Published Data Source
   - Name: `int_orders_enriched`
-  - Target project: `Sales Analytics/intermediate`
+  - Target project: `Sales Analytics/datasources/intermediate`
 - **Joins**:
   - #9 SuperJoin orders × opps: cardinality `N:1` (各 order に対し対応する opp は 1 件)
 - **Included original steps**: 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20
@@ -106,7 +106,7 @@ note: 必須セクション (Summary / New .tfl files / Actions-level splits / O
 - **Outputs**:
   - Type: Published Data Source
   - Name: `int_customer_classified`
-  - Target project: `Sales Analytics/intermediate`
+  - Target project: `Sales Analytics/datasources/intermediate`
 - **Included original steps**: 21, 22, 23, 24
 - **Description**:
   customer entity の分類ロジック（LTV ランク・セグメント判定）。dim_customer の素材となる。
@@ -119,14 +119,14 @@ note: 必須セクション (Summary / New .tfl files / Actions-level splits / O
 - **Outputs**:
   - Type: Published Data Source
   - Name: `fct_sales`
-  - Target project: `Sales Analytics/marts`
+  - Target project: `Sales Analytics/datasources/marts`
 - **Included original steps**: 38, 39, 40, 41, 42
 - **Description**:
   最終的な売上ファクト。dim_customer とは別 Published DS として publish（再利用素材）。BI が顧客属性込みで読む用途には別途 `rpt_sales_with_customer.tfl` を作って結合済み Published DS を提供する。
 
 ### dim_customer
 
-[同じ書式で続く。Inputs: Published DS `int_customer_classified` / Outputs: Published DS `dim_customer` / Target project: `Sales Analytics/marts`]
+[同じ書式で続く。Inputs: Published DS `int_customer_classified` / Outputs: Published DS `dim_customer` / Target project: `Sales Analytics/datasources/marts`]
 
 ### rpt_sales_with_customer
 
@@ -137,7 +137,7 @@ note: 必須セクション (Summary / New .tfl files / Actions-level splits / O
 - **Outputs**:
   - Type: Published Data Source
   - Name: `rpt_sales_with_customer`
-  - Target project: `Sales Analytics/marts`
+  - Target project: `Sales Analytics/datasources/marts`
 - **Joins**:
   - LEFT JOIN fct_sales × dim_customer on customer_id: cardinality `N:1` (各 sale に対し対応する customer は 1 件)
 - **Description**:
@@ -228,11 +228,16 @@ prep-builder の build 開始前に [`scripts/flow_io.py`](../scripts/flow_io.py
 
 Parent project: `Sales Analytics`（ユーザー指定、要事前作成）
 
-| Subproject | Contains (.tfl) | Published DS | Permissions (推奨) |
-|---|---|---|---|
-| `stg` | stg_salesforce__opportunities, stg_snowflake__orders | stg_salesforce__opportunities, stg_snowflake__orders | ETL team: Editor / Others: Viewer |
-| `intermediate` | int_orders_enriched, int_customer_classified | int_orders_enriched, int_customer_classified | ETL team: Editor / Others: None |
-| `marts` | fct_sales, dim_customer, rpt_sales_with_customer | fct_sales, dim_customer, rpt_sales_with_customer | BI team: Editor / Wide: Viewer |
+target 直下に `flows/` (flow .tfl の publish 先) と `datasources/` (Published DS の publish 先) の 2 親を作り、各々の下に dbt 3 レイヤを置く ([project-hierarchy.md](project-hierarchy.md))。
+
+| Subproject | Contains | Permissions (推奨) |
+|---|---|---|
+| `flows/stg` | stg_salesforce__opportunities.tfl, stg_snowflake__orders.tfl | ETL: Editor / BI: Viewer |
+| `flows/intermediate` | int_orders_enriched.tfl, int_customer_classified.tfl | ETL: Editor / BI: None |
+| `flows/marts` | fct_sales.tfl, dim_customer.tfl, rpt_sales_with_customer.tfl | ETL: Editor / BI: Viewer |
+| `datasources/stg` | stg_salesforce__opportunities, stg_snowflake__orders (PDS) | ETL: Editor / BI: Viewer |
+| `datasources/intermediate` | int_orders_enriched, int_customer_classified (PDS) | ETL: Editor / BI: None |
+| `datasources/marts` | fct_sales, dim_customer, rpt_sales_with_customer (PDS) | BI: Editor / Wide: Viewer |
 
 Project creation commands（`prep-deployer` で実行）:
 ```bash

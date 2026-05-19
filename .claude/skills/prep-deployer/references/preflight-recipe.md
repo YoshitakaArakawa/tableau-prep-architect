@@ -18,21 +18,36 @@ note: deploy-context.md frontmatter の消費、pending segments の順次作成
 deploy-context.md の frontmatter から:
   existing_prefix_luid, pending_segments, target_status を取得
 
+# Step 1: 上位 pending segments を作って target まで到達
 parent_luid = existing_prefix_luid      # null なら top-level
-for seg in pending_segments:            # 順次作成
+for seg in pending_segments:
     create_project.py --parent-id <parent_luid> --name <seg>
     parent_luid = 返ってきた LUID
-
-# parent_luid は今や target の LUID
 target_luid = parent_luid
 
-dbt layer presence を確認:
-    missing = [stg/int/marts のうち存在しないもの]
-    if missing:
-        create_projects.py --parent-id <target_luid> --layers <missing>
+# Step 2: target 直下に flows/ と datasources/ を作る (新レイアウト)
+flows_luid       = create_project.py --parent-id <target_luid> --name flows
+datasources_luid = create_project.py --parent-id <target_luid> --name datasources
+
+# Step 3: flows/ と datasources/ それぞれの下に dbt 3 レイヤを作る
+missing_flows = [stg/int/marts のうち flows/ 配下に存在しないもの]
+if missing_flows:
+    create_projects.py --parent-id <flows_luid> --layers <missing_flows>
+
+missing_ds = [stg/int/marts のうち datasources/ 配下に存在しないもの]
+if missing_ds:
+    create_projects.py --parent-id <datasources_luid> --layers <missing_ds>
 ```
 
-すべての pending を作り切る前提（ユーザーが target path を指示した時点で全段の作成が同意されている）。
+すべての pending を作り切る前提（ユーザーが target path を指示した時点で全段の作成が同意されている）。`create_project.py` / `create_projects.py` は idempotent なので、すでに存在する project は `[skip]` で安全。
+
+## なぜ flows/ と datasources/ を分けるか
+
+[../../../../references/project-hierarchy.md](../../../../references/project-hierarchy.md) で詳述。要点:
+
+- ETL 担当 (flows 側 Editor) と BI 担当 (datasources 側 Editor) の権限分離
+- Cloud UI 上で flow と DS が混ざらず一覧性が向上
+- 1 つの flow の中で「.tfl 本体の publish 先」と「PDS の publish 先」が別プロジェクト (Tableau REST API の `FlowItem.project_id` と PublishExtract ノード内 `projectLuid` が独立で支持)
 
 ## エラー時の挙動
 
@@ -43,8 +58,8 @@ dbt layer presence を確認:
 
 | スクリプト | 用途 |
 |---|---|
-| `scripts/create_project.py` | 1 セグメントずつ作成（pending loop で繰り返し呼ぶ） |
-| `scripts/create_projects.py` | dbt 3 レイヤをまとめて作成（最後の 1 回） |
+| `scripts/create_project.py` | 1 セグメントずつ作成 (pending loop で繰り返し呼ぶ。target 直下の `flows/` と `datasources/` も本スクリプトで作成) |
+| `scripts/create_projects.py` | dbt 3 レイヤをまとめて作成 (flows/ 配下と datasources/ 配下の **2 回呼ぶ**) |
 
 両方とも idempotent かつ非対話。重複呼び出しは `[skip]` で安全。
 

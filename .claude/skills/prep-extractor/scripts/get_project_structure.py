@@ -5,9 +5,15 @@ Read-only. Resolves a user-specified project (by path or LUID) and writes a
 `deploy-context.md` describing:
 
   - Target parent project (path, LUID, writeable?)
-  - Subprojects directly under the target (incl. stg/intermediate/marts presence)
+  - Subprojects directly under the target (expects `flows/` and `datasources/`)
+  - dbt layer presence under `flows/` AND under `datasources/` (2x3 = 6 cells)
   - Existing flows in the target subtree (for naming-collision awareness in decompose)
-  - Layers missing under the target (consumed by prep-deployer preflight)
+  - Missing parents/layers (consumed by prep-deployer preflight)
+
+Layout model (see references/project-hierarchy.md):
+    target/
+      ├── flows/{stg,intermediate,marts}/       ← .tfl publish destinations
+      └── datasources/{stg,intermediate,marts}/ ← Published DS publish destinations
 
 Why path/LUID and not URL?
   Tableau Cloud project URLs use vizportalUrlId (numeric), which is NOT exposed
@@ -40,6 +46,7 @@ from tableau_auth import sign_in_server  # noqa: E402
 
 
 DBT_LAYERS = ("stg", "intermediate", "marts")
+TARGET_PARENTS = ("flows", "datasources")  # target 直下の規約固定 2 親
 
 
 def parse_args():
@@ -163,20 +170,42 @@ def render(target, target_path, target_status, target_writeable,
            children, flows_in_subtree, all_projects):
     """Render deploy-context.md.
 
-    Model: the "target" is the direct parent of stg/int/marts at the end of
-    --project-path. Above it, any number of intermediate segments are allowed,
-    and any trailing run of those (including the target itself) may not exist
-    yet — captured as pending_segments. prep-deployer's preflight creates them
-    one at a time, each requiring user approval.
+    Model: the "target" is the direct parent of `flows/` and `datasources/`
+    at the end of --project-path. Each of those parents has the dbt 3 layers
+    (`stg`/`intermediate`/`marts`) underneath. Above the target, any number of
+    intermediate segments are allowed, and any trailing run of those (including
+    the target itself) may not exist yet — captured as pending_segments.
+    prep-deployer's preflight creates everything top-down.
     """
     by_id = {p.id: p for p in all_projects}
-    layer_status = {layer: None for layer in DBT_LAYERS}
+    # target 直下: flows/, datasources/ 各々の有無
+    target_parents_status = {name: None for name in TARGET_PARENTS}
+    # 各 target_parent (flows / datasources) の下: dbt 3 layer の有無
+    # 構造: {parent_name: {layer_name: ProjectItem | None}}
+    layer_status_by_parent = {name: {layer: None for layer in DBT_LAYERS}
+                              for name in TARGET_PARENTS}
     if target is not None:
         for c in children:
-            if c.name in layer_status:
-                layer_status[c.name] = c
+            if c.name in target_parents_status:
+                target_parents_status[c.name] = c
+        # 各 parent の子を走査
+        for parent_name, parent_proj in target_parents_status.items():
+            if parent_proj is None:
+                continue
+            for p in all_projects:
+                if p.parent_id == parent_proj.id and p.name in DBT_LAYERS:
+                    layer_status_by_parent[parent_name][p.name] = p
 
-    missing = [layer for layer, c in layer_status.items() if c is None]
+    missing_parents = [n for n, p in target_parents_status.items() if p is None]
+    missing_layers = []  # [(parent_name, layer_name), ...]
+    for parent_name in TARGET_PARENTS:
+        if target_parents_status[parent_name] is None:
+            # parent 未作成なら 3 layer 全部 missing
+            missing_layers.extend([(parent_name, layer) for layer in DBT_LAYERS])
+        else:
+            for layer in DBT_LAYERS:
+                if layer_status_by_parent[parent_name][layer] is None:
+                    missing_layers.append((parent_name, layer))
     deepest_existing = existing_chain[-1] if existing_chain else None
 
     lines = []
@@ -203,13 +232,15 @@ def render(target, target_path, target_status, target_writeable,
     lines.append("Read-only snapshot of the Tableau Server/Cloud structure under the deploy target.")
     lines.append("Consumed by prep-architect (decompose) and prep-deployer (preflight + publish).")
     lines.append("")
-    lines.append("Model: **target** = the direct parent of `stg / intermediate / marts`. ")
+    lines.append("Model: **target** = the direct parent of `flows/` and `datasources/`. ")
+    lines.append("Each of those parents contains the dbt 3 layers (`stg`/`intermediate`/`marts`). ")
     lines.append("Above the target, any number of intermediate path segments are allowed. ")
     lines.append("Trailing segments may be `pending`; prep-deployer preflight creates them one ")
-    lines.append("at a time, each requiring user approval, then creates the dbt layers.")
+    lines.append("at a time, then creates `flows/` and `datasources/` under target, then the dbt ")
+    lines.append("layers under each.")
     lines.append("")
 
-    lines.append("## Target (parent of stg/int/marts)")
+    lines.append("## Target (parent of flows/ and datasources/)")
     lines.append("")
     lines.append(f"- Server: `{server_url}`")
     lines.append(f"- Site: `{site_name or '<default>'}`")
@@ -264,34 +295,46 @@ def render(target, target_path, target_status, target_writeable,
     if target is None:
         lines.append("_(target does not exist yet — N/A.)_")
     elif not children:
-        lines.append("_(none)_")
+        lines.append("_(none — `flows/` and `datasources/` are both missing, preflight will create both.)_")
     else:
-        lines.append("| name | LUID | dbt layer? |")
+        lines.append("| name | LUID | expected parent? |")
         lines.append("|---|---|---|")
         for c in sorted(children, key=lambda x: x.name or ""):
-            layer_mark = "★" if c.name in DBT_LAYERS else ""
-            lines.append(f"| `{c.name}` | `{c.id}` | {layer_mark} |")
+            mark = "★" if c.name in TARGET_PARENTS else ""
+            lines.append(f"| `{c.name}` | `{c.id}` | {mark} |")
+        lines.append("")
+        lines.append("`★` = expected target parent (`flows` or `datasources`). Other children are tolerated but unused by this Skill.")
     lines.append("")
 
-    lines.append("## dbt layer presence")
+    lines.append("## dbt layer presence (under flows/ and datasources/)")
     lines.append("")
     if target is None:
-        lines.append("_(target does not exist yet — all 3 layers will be created after the target is created.)_")
+        lines.append("_(target does not exist yet — `flows/`, `datasources/`, and all 6 dbt layers will be created after the target is created.)_")
     else:
-        lines.append("| layer | present? | LUID |")
-        lines.append("|---|---|---|")
-        for layer in DBT_LAYERS:
-            c = layer_status[layer]
-            if c:
-                lines.append(f"| `{layer}` | yes | `{c.id}` |")
+        lines.append("| parent | layer | present? | LUID |")
+        lines.append("|---|---|---|---|")
+        for parent_name in TARGET_PARENTS:
+            parent_proj = target_parents_status[parent_name]
+            if parent_proj is None:
+                # parent 自体が無いので、3 layer 全部 missing
+                for layer in DBT_LAYERS:
+                    lines.append(f"| `{parent_name}` | `{layer}` | **NO** (parent missing) | — |")
             else:
-                lines.append(f"| `{layer}` | **NO** | — |")
+                for layer in DBT_LAYERS:
+                    c = layer_status_by_parent[parent_name][layer]
+                    if c:
+                        lines.append(f"| `{parent_name}` | `{layer}` | yes | `{c.id}` |")
+                    else:
+                        lines.append(f"| `{parent_name}` | `{layer}` | **NO** | — |")
         lines.append("")
-        if missing:
-            lines.append(f"**Missing layers**: {', '.join(f'`{m}`' for m in missing)}. "
-                         "prep-deployer preflight will request approval to create these.")
-        else:
-            lines.append("All standard layers exist. prep-deployer can skip the dbt-layer creation step.")
+        if missing_parents:
+            lines.append(f"**Missing parents**: {', '.join(f'`{n}`' for n in missing_parents)}. "
+                         "prep-deployer preflight will create these under target.")
+        if missing_layers:
+            mlist = ", ".join(f"`{p}/{l}`" for p, l in missing_layers)
+            lines.append(f"**Missing layers**: {mlist}. preflight will create these under their parents.")
+        if not missing_parents and not missing_layers:
+            lines.append("All parents and dbt layers exist. preflight can skip creation steps.")
     lines.append("")
 
     lines.append("## Existing flows in target subtree")
@@ -317,9 +360,9 @@ def render(target, target_path, target_status, target_writeable,
     lines.append("Pass this file's path to:")
     lines.append("")
     lines.append("- **prep-architect (decompose)** — uses `## Existing flows` to avoid name collisions.")
-    lines.append("- **prep-deployer (preflight)** — iterates `pending_segments` (creating each under ")
-    lines.append("  the previous, with user approval), then ensures `stg / intermediate / marts` exist ")
-    lines.append("  under the resulting target.")
+    lines.append("- **prep-deployer (preflight)** — iterates `pending_segments` to reach target, ")
+    lines.append("  then ensures `flows/` and `datasources/` exist under target, then ensures ")
+    lines.append("  `stg / intermediate / marts` exist under each (2x3 = 6 dbt layer projects).")
     return "\n".join(lines) + "\n"
 
 
@@ -401,16 +444,19 @@ def main():
         if pending_segments:
             print(f"  pending:  {' → '.join(pending_segments)}  ({len(pending_segments)} segment(s))")
         if target is not None:
-            missing = [layer for layer in DBT_LAYERS
-                       if not any(c.name == layer for c in children)]
-            if missing:
-                print(f"  missing dbt layers: {', '.join(missing)}")
+            present_parents = [n for n in TARGET_PARENTS
+                               if any(c.name == n for c in children)]
+            missing_parents = [n for n in TARGET_PARENTS if n not in present_parents]
+            if missing_parents:
+                print(f"  missing target parents: {', '.join(missing_parents)} "
+                      "(preflight will create)")
             else:
-                print(f"  dbt layers: all present (stg/intermediate/marts)")
+                print(f"  target parents present: {', '.join(present_parents)}")
+            # dbt layer 詳細は MD レポートで確認 (CLI 印字は要約のみ)
             print(f"  flows in subtree: {len(flows_in_subtree)}")
         else:
             print(f"  preflight will need to: create {len(pending_segments)} segment(s), "
-                  "then create stg/int/marts under the last one")
+                  "then `flows/` and `datasources/` under target, then stg/int/marts under each")
 
 
 if __name__ == "__main__":
