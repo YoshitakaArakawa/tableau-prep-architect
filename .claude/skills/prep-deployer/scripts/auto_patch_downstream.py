@@ -36,10 +36,12 @@ Usage:
       --flows-dir work/<session>/flows \
       --target-path "99_Sandbox/flow241407_decompose"
 
-`--target-path` is the path of the parent project that holds the stg /
-intermediate / marts subprojects on Cloud. The PDS lookup scope and
-LoadSqlProxy.projectName matching during patch are derived as
-`<target_path>/<layer>` per ready PDS.
+`--target-path` is the path of the **target project** on Cloud that holds
+the `datasources/{stg,intermediate,marts}` subprojects (split layout
+introduced in commit 2d83cfa). The upstream PDS lookup path is derived
+as `<target_path>/datasources/<cloud_layer_name>` where `cloud_layer_name`
+maps manifest's `staging` -> `stg` and passes `intermediate` / `marts`
+through unchanged.
 """
 
 from __future__ import annotations
@@ -61,6 +63,16 @@ import discover_pds_dbname  # noqa: E402
 
 LAYER_DIRS = ("staging", "intermediate", "marts")
 
+# Manifest layer label -> Cloud subproject name under <target>/datasources/.
+# Manifest stores the long form ("staging") to match local flows/ subdirs and
+# prep-architect's analysis docs; Cloud uses the short form ("stg") for the
+# datasources/<layer> project name per references/naming-conventions.md.
+MANIFEST_LAYER_TO_CLOUD_DS_LAYER = {
+    "staging": "stg",
+    "intermediate": "intermediate",
+    "marts": "marts",
+}
+
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
@@ -70,9 +82,13 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--flows-dir", required=True,
                    help="Path to the flows/ directory containing staging/, intermediate/, marts/")
     p.add_argument("--target-path", required=True,
-                   help="Path of the parent project on Cloud that holds stg/int/marts "
-                        "(e.g. '99_Sandbox/flow241407_decompose'). project_path per PDS "
-                        "is derived as '<target-path>/<layer>'.")
+                   help="Path of the target project on Cloud that holds "
+                        "datasources/{stg,intermediate,marts} "
+                        "(e.g. '99_Sandbox/flow241407_decompose'). The upstream PDS "
+                        "lookup path is derived as "
+                        "'<target-path>/datasources/<cloud_layer_name>', where "
+                        "manifest's 'staging' maps to Cloud's 'stg' "
+                        "(intermediate / marts pass through unchanged).")
     p.add_argument("--use-candidate", default="content_url",
                    help="Which discover_pds_dbname candidate to use as dbname "
                         "(default: content_url)")
@@ -168,7 +184,18 @@ def main() -> int:
         )
         return 0
 
-    pds_project = {ds: f"{target_path}/{layer}" for ds, layer in ready.items()}
+    unknown_layers = {layer for layer in ready.values() if layer not in MANIFEST_LAYER_TO_CLOUD_DS_LAYER}
+    if unknown_layers:
+        sys.exit(
+            f"ERROR: manifest contains unknown layer(s) {sorted(unknown_layers)}; "
+            f"expected one of {sorted(MANIFEST_LAYER_TO_CLOUD_DS_LAYER)}. "
+            f"Update MANIFEST_LAYER_TO_CLOUD_DS_LAYER in auto_patch_downstream.py."
+        )
+
+    pds_project = {
+        ds: f"{target_path}/datasources/{MANIFEST_LAYER_TO_CLOUD_DS_LAYER[layer]}"
+        for ds, layer in ready.items()
+    }
 
     print(f"[auto_patch] {len(ready)} ready PDS(es) in manifest:")
     for ds, layer in sorted(ready.items()):
