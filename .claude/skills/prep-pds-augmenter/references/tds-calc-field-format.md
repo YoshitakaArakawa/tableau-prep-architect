@@ -1,13 +1,25 @@
 ---
-purpose: Tableau Calculated Field を .tds XML に注入する際の構造仕様。prep-pds-augmenter が参照
+purpose: prep-pds-augmenter が .tds XML を編集する際の構造仕様。Calculated Field の注入と column-level transforms (rename / hide / cast) の XML 形を定義
 sources:
   - Sample - Superstore.tds (Tableau Desktop 同梱、Profit Ratio の構造)
   - https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm
 fetched_at: 2026-05-19
-note: .tds (XML) 内の Calculated Field 表現方法と、prep-pds-augmenter が採用する注入ルールを定義。Hyper extract-based PDS で検証済 (round-trip 成功)
+note: extract-based (Hyper-backed) と live (virtual-connection backed) の両方の PDS で round-trip 成功を確認済
 ---
 
-# TDS Calculated Field 注入フォーマット
+# TDS XML 編集フォーマット
+
+## 目次
+
+- Calc 注入 (calc-field)
+  - .tds 内の位置
+  - `<column>` 要素の属性
+  - `<calculation>` 子要素 / XML escape
+  - 注入の正解例
+  - 検証ポイント (round-trip)
+- Column-level Transforms (rename / hide / cast)
+- .tds の 3 層構造 (なぜ cast は override では駄目か)
+- 既知の制約
 
 ## .tds 内の位置
 
@@ -90,8 +102,71 @@ publish 後の再 DL で .tds 内に以下が残っていれば成功:
 
 Cloud は publish 時に formula を字句的に書き換えない (本 Skill の検証で実証済み)。並べ替えもしないため、注入位置がそのまま保持される。
 
+## Column-level Transforms (rename / hide / cast)
+
+Skill が calc 注入と並んで扱う、既存 `<column>` 要素への属性編集。すべて `<datasource>` 直下の `<column ... />` (self-closing) 要素を対象にする。
+
+### rename: `caption` 属性の書き換え
+
+```xml
+<!-- before -->
+<column caption='Workbook Repo Url' datatype='string' name='[71773dea-...]' role='dimension' type='nominal' />
+<!-- after -->
+<column caption='workbook_repo_url' datatype='string' name='[71773dea-...]' role='dimension' type='nominal' />
+```
+
+`name` 属性は不変。caption は consumer 名前空間 (VizQL / Workbook / Prep input) で表示される。
+
+### hide: `hidden='true'` の追加
+
+```xml
+<column caption='Workbook Repo Url' datatype='string' name='[71773dea-...]' role='dimension' type='nominal' hidden='true' />
+```
+
+`hidden='true'` を持つ `<column>` は VizQL Metadata API の field 一覧から除外される。Workbook / Prep input の picker からも見えなくなる。
+
+### cast: hidden + cast calc の組合せ
+
+`<column datatype>` の書き換え単独では VizQL 層に届かない (cosmetic) ため、cast は 2 ステップで実現:
+
+1. 元 column に `hidden='true'` を追加 (上記 hide と同じ)
+2. 新規 calc column を追加 (下記 Calculated Field と同じ形)、formula は datatype 別の cast 関数:
+
+```xml
+<column caption='view_count' datatype='real' name='[Calculation_<unix-ms>]' role='measure' type='quantitative'>
+  <calculation class='tableau' formula='FLOAT([10f83648-...])' />
+</column>
+```
+
+cast 関数の対応:
+
+| to_datatype | default formula |
+|---|---|
+| `real` | `FLOAT(<orig>)` |
+| `integer` | `INT(<orig>)` |
+| `string` | `STR(<orig>)` |
+| `date` | `DATE(<orig>)` |
+| `datetime` | `DATETIME(<orig>)` |
+| `boolean` | default なし (caller が cast_formula を明示) |
+
+新規 calc の `<column>` は元 column と sibling 関係で、`<aliases enabled='yes' />` 直後 (calc 注入と同じ位置) に挿入する。
+
+## .tds の 3 層構造 (なぜ cast は override では駄目か)
+
+.tds の column 表現は層をなしている:
+
+| 層 | 用途 | 編集が反映される consumer |
+|---|---|---|
+| `<metadata-records><local-type>` 等 | vconn / extract が報告する source-of-truth | 編集してもサーバーで上書きされ、PDS 側からは触れない扱い |
+| `<column datatype>` (`<datasource>` 直下) | Desktop UI 表示の override | **Desktop UI のみ**。VizQL Metadata API / query 層には届かない |
+| `<column caption>` (同上) | consumer 名前空間 | **全層 (VizQL / Workbook / Prep input)** |
+| `<column>` 直下の `<calculation>` 子要素 | 新規 calc field | **全層 (新規 field として exposure される)** |
+
+rename / hide は caption 層と hidden 属性層なので consumer 全体に効く。型変更は datatype 層では cosmetic にとどまるので、cast op では calc 層 (新規 field) を使って実体ある型変換を行う。
+
 ## 既知の制約
 
-- live-connection (extract 非 hyper) PDS への注入は未検証
 - 既存 calc field の **編集・削除** は本フォーマット仕様の範囲外 (本 Skill のスコープも注入のみ)
+- 既存 column の **削除** は scope 外 (vconn / extract schema との整合崩壊リスク)。hide で suppress に留める
 - 計算式の **構文検証** はサーバー publish 試行のみ (ローカル lint は持たない)。構文エラーは publish 時 HTTP 400 で発覚
+- VizQL 層で cast が effective かの最終 assertion は本 Skill 外。caller が `mcp__tableau__get-datasource-metadata` で `dataType: REAL` / `columnClass: CALCULATION` を確認する
