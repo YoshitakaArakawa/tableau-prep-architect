@@ -62,7 +62,7 @@ def parse_args():
                         "the datasource scan. Repeat for multiple paths. "
                         "Use this to bring Input PDS parent projects (e.g. "
                         "'0_Datasource' shared across flows) into scope so "
-                        "Phase C (input-dispatch) can resolve their LUIDs. "
+                        "Phase B (cloud context extraction) can resolve their LUIDs. "
                         "Missing paths are reported as warnings, not errors.")
     return p.parse_args()
 
@@ -415,7 +415,7 @@ def render(target, target_path, target_status, target_writeable,
         lines.append("")
 
     # Datasources (PDS) in the union of target subtree + any also-scanned
-    # subtrees. Consumed by prep-extractor Phase C (dispatch_inputs.py) to
+    # subtrees. Consumed by prep-extractor Phase B (dispatch_inputs.py) to
     # resolve PDS LUIDs by (project_path, name).
     lines.append("## Datasources in scope")
     lines.append("")
@@ -446,7 +446,7 @@ def render(target, target_path, target_status, target_writeable,
     lines.append("- **prep-deployer (preflight)** — iterates `pending_segments` to reach target, ")
     lines.append("  then ensures `flows/` and `datasources/` exist under target, then ensures ")
     lines.append("  `stg / intermediate / marts` exist under each (2x3 = 6 dbt layer projects).")
-    lines.append("- **prep-extractor Phase C (dispatch_inputs.py)** — reads `## Datasources in scope` to ")
+    lines.append("- **prep-extractor Phase B (dispatch_inputs.py)** — reads `## Datasources in scope` to ")
     lines.append("  resolve PDS LUIDs for each Input node of the source flow.")
     return "\n".join(lines) + "\n"
 

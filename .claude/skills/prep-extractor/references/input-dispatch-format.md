@@ -1,110 +1,142 @@
 ---
-purpose: prep-extractor Phase C が出力する input-dispatch.md の書式仕様
+purpose: prep-extractor Phase B が出力する input-dispatch-mech.json の JSON スキーマ仕様。architect が consume する mechanical findings のフォーマット
 fetched_at: 2026-05-24
-note: status=pending (proposal) と status=confirmed (user 合意済) の 2 状態。後段 architect / decomposer が consume する frontmatter は固定キー
+note: トップレベル構造と per-Input record のスキーマ、kind 別の追加フィールド (pds / vconn / direct_db / extract)、architect の consume パターンを規定する
 ---
 
 # input-dispatch-format
 
-`work/<session>/reports/input-dispatch.md` の書式。Phase C で生成、ユーザー確認を経て status を `confirmed` に書き換え、architect / decomposer が読む。
+`work/<session>/reports/input-dispatch-mech.json` の JSON スキーマ。Phase B の `dispatch_inputs.py` が生成、prep-architect が読む。**ユーザー確認のための markdown ではない** — 単なる mechanical findings の永続化。
 
-## 状態
+## トップレベル構造
 
-| status | 意味 | 書き換える主体 |
-|---|---|---|
-| `pending` | Phase C の LLM が提案を書いた状態。ユーザー確認待ち | Phase C スクリプト + fork 内 LLM |
-| `confirmed` | ユーザー応答を受けて main agent が反映済み。後段 consumer が読む対象 | main agent (Phase C 再実行は不要) |
-
-## 構造
-
-```markdown
----
-status: pending          # or "confirmed"
-source_flow: work/<session>/flow.json
-deploy_context: work/<session>/reports/deploy-context.md
-generated_at: <ISO-8601 JST>
-confirmed_at: <ISO-8601 JST or null>
-input_count: <N>
-kind_counts:
-  pds: <n>
-  vconn: <n>
-  direct_db: <n>
-  extract: <n>
-  unknown: <n>
-blocks_present: <true | false>  # true なら session 停止
----
-
-# Input dispatch: <flow-name>
-
-## Summary
-
-(1-2 行で全体状況。例: "vconn 1 / pds 1。passthrough + augment で進行可能。block なし。")
-
-## Inputs
-
-| # | Input ノード名 | kind | 推奨方針 | 根拠 | PDS LUID / vconn LUID |
-|---|---|---|---|---|---|
-| 1 | <name> | pds | **passthrough** | (理由 1 文) | `<luid>` (deploy-context.md 解決済) |
-| 2 | <name> | vconn | **augment** | (理由 1 文) | `<vconn-luid>` (flow.json から直接抽出) |
-| 3 | <name> | direct_db | **block** | Prep に DB 認証情報を入れない方針 | n/a |
-
-## Per-input proposals
-
-### #1 <name> (passthrough)
-
-passthrough なので新規 stg PDS は作らない。intermediate flow は以下 PDS を Input として直接参照する:
-
-- Project path: `<path>`
-- PDS name: `<name>`
-- PDS LUID: `<luid>`
-
-ユーザー確認事項: この PDS で本当に整形済みか? (`stg_*` 用の rename / cast / hide が不要か)
-
-### #2 <name> (augment)
-
-vconn から `stg_<name>` を新規 publish。
-
-**policy 級 Transforms 提案** (詳細表は decompose で確認):
-
-- 全 N 列の caption を snake_case 化:
-  - ASCII 列 (M 個): 機械変換 (例: `Update Date` → `update_date`)
-  - 非 ASCII 列 (M' 個): semantic translation (例: `数量` → `quantity`, `単価 (Usd)` → `unit_price_usd`)
-- cast: なし (型 OK / 業務文脈要のため AI 側からの強い提案は控える)
-- hide: なし (下流参照状況要確認)
-
-### #3 <name> (block)
-
-(direct_db / extract / unknown のときの escalation 文をそのまま書く。`phase-c-procedure.md §LLM の責務 2` 参照)
-
-## User confirmation
-
-OK で全提案を受諾するか、行番号 + 指示で個別変更:
-
-- `OK`
-- `#1 を augment に変更 (このPDSが実は raw extract で整形必要)`
-- `#2 の rename を 全部 user_<番号> 形式に変更 (semantic translation を保留)`
-- 等
-
-応答後、main agent が本ファイルの status を `confirmed` に変えて user decision を反映:
-
-\`\`\`yaml
----
-status: confirmed
-...
-confirmed_at: 2026-05-24T11:30:00+09:00
----
-\`\`\`
-
-各 Input セクションの「推奨方針」とその下の Transforms 提案を user 合意版に書き換える。元の proposal は履歴として残したい場合は `## Proposal history` セクションを末尾に追加 (オプション)。
+```jsonc
+{
+  "flow_path": "work/<session>/flow.json",
+  "deploy_context_path": "work/<session>/reports/deploy-context.md",
+  "input_count": 2,
+  "kind_counts": {
+    "pds": 1,
+    "vconn": 1,
+    "direct_db": 0,
+    "extract": 0,
+    "unknown": 0
+  },
+  "pds_project_parents_needed_in_scope": ["0_Datasource"],
+  "inputs": [ /* per-input records, see below */ ]
+}
 ```
 
-## 後段の consume 規約
+`unknown` が 1 以上のとき dispatch_inputs.py は exit 2 で停止するため、本ファイルが書き出される時点で `kind_counts.unknown == 0` が保証される ([cloud-context-procedure.md §unknown 検出時の挙動](cloud-context-procedure.md))。
 
-| consumer | 読む内容 | 用途 |
+## per-Input record (`inputs[]` の各要素)
+
+共通フィールド (全 kind):
+
+| フィールド | 型 | 内容 |
 |---|---|---|
-| prep-architect (analyze) | `## Inputs` 表 + frontmatter `blocks_present` | block ありなら decompose しない (session 停止) |
-| prep-architect (decompose) | 各 Input の "推奨方針" + augment 行の Transforms 提案 | stg entry の Materialization 決定、Transforms (column-level) 表の初期値 |
-| prep-builder | (architect の decomposition-plan 経由で間接的に) | input-dispatch.md は直接参照しない |
-| prep-deployer | 同上 | input-dispatch.md は直接参照しない |
+| `node_id` | string | flow.json 内の Input ノード UUID |
+| `node_name` | string | Tableau Prep UI 上の表示名 |
+| `kind` | enum | `pds` / `vconn` / `direct_db` / `extract` |
+| `node_type` | string | flow.json の nodeType (例: `.v2019_3_1.LoadSqlProxy`) |
+| `fields` | array | 列メタの配列 (isGenerated=True 除外、下記スキーマ参照) |
 
-architect は decompose 時に Transforms 提案を **decomposition-plan.md の `Transforms (column-level)` 表に転記** する (詳細値の調整は plan レビュー時に再度ユーザーから受ける、二段確認)。
+### `fields[]` のスキーマ
+
+```jsonc
+{
+  "name_raw": "9dc73cbd-8280-35c8-8406-cec646dcf77d",
+  "name_bracketed": "[9dc73cbd-8280-35c8-8406-cec646dcf77d]",
+  "caption": "数量",
+  "datatype": "integer"
+}
+```
+
+- `name_raw`: 列名 (uuid のことも raw 名のことも、Input によって異なる)
+- `name_bracketed`: `[<name_raw>]` 形式。decomposition-plan の Transforms 表に `column_name` として転記される
+- `caption`: ユーザー可読名 (Tableau Prep UI 上の名前、空文字列のこともある)
+- `datatype`: `string` / `integer` / `real` / `date` / `datetime` / `bool` 等
+
+### kind=pds 固有フィールド
+
+```jsonc
+"pds": {
+  "project_name": "0_Datasource",
+  "datasource_name": "stockmarket_data_prepped",
+  "dbname": "stockmarket_data_prepped_17570800516990",
+  "resolution": {
+    "status": "resolved",
+    "luid": "f1390b46-c0de-42e1-a470-974722e0800d",
+    "project_path": "0_Datasource"
+  }
+}
+```
+
+`resolution.status` は 3 値:
+
+| status | 追加フィールド | 意味 |
+|---|---|---|
+| `resolved` | `luid`, `project_path` | deploy-context.md で一意に LUID 解決 |
+| `ambiguous` | `candidates: [{project_path, name, luid}, ...]` | 同名 PDS が複数候補。architect が Stop 2 でユーザー disambiguate |
+| `unresolved` | `reason: string` | deploy-context.md に該当 PDS なし。architect は Phase B 再 scan or augment 切替を Stop 2 で提示 |
+
+### kind=vconn 固有フィールド
+
+```jsonc
+"vconn": {
+  "vconn_luid": "72b2ce16-b481-4088-9749-8a3593b92976",
+  "vconn_caption": "Google Drive Tables",
+  "table_uuid": "16bb67b3-17c6-4f8b-8e22-97f4dde8d16c",
+  "table_name": "Transactions"
+},
+"augmenter_columns_hint": [
+  {
+    "name": "[e9143b20-3eb0-3e15-96fe-abc98655b63c]",
+    "remote_name": "e9143b20-3eb0-3e15-96fe-abc98655b63c",
+    "caption": "取引",
+    "datatype": "string"
+  },
+  ...
+]
+```
+
+`augmenter_columns_hint` は prep-pds-augmenter の vconn-source 入力フォーマットに整形済の列メタ。builder が `Materialization=live_pds` の stg を build するときにそのまま augmenter spec の `columns` フィールドに渡せる。
+
+### kind=direct_db 固有フィールド
+
+```jsonc
+"direct_db": {
+  "connection_class": "snowflake",
+  "node_type": ".v1.LoadSql"
+}
+```
+
+architect は `connection_class` を見て provisioning 案を組み立てる (snowflake → vconn 化 / extract → PDS publish 等)。
+
+### kind=extract 固有フィールド
+
+extract Input (local .hyper 等) は本リポでは実検証ゼロのため future schema。発生時は `extract` という kind ラベルのみ付与、追加情報は将来拡張で対応。architect は `needs_provisioning` として扱う。
+
+## architect の consume パターン
+
+```python
+# concept: 実装は architect の decompose 内
+mech = json.load(open("input-dispatch-mech.json"))
+for inp in mech["inputs"]:
+    kind = inp["kind"]
+    if kind == "pds" and inp["pds"]["resolution"]["status"] == "resolved":
+        # default: passthrough (PDS 直参照、stg 作らない)
+        # exception: PDS 名から raw データ匂い → augment 候補として Stop 2 で確認
+        ...
+    elif kind == "vconn":
+        # default: augment (Materialization=live_pds で stg PDS 新規 publish)
+        # augmenter_columns_hint と fields[] から Rename proposals 表を組み立て
+        ...
+    elif kind in ("direct_db", "extract"):
+        # needs_provisioning
+        # provisioning 案を `## Input provisioning required` セクションに追加
+        # build 時に当該 stg は skip + manifest warning
+        ...
+```
+
+詳細な policy / rename / provisioning ルールは [prep-architect/references/review-checkpoints.md](../../prep-architect/references/review-checkpoints.md) の Tier 1 / Tier 2 を参照。

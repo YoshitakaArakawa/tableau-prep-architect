@@ -1,33 +1,36 @@
-"""Phase C helper: classify each Input node of a Prep flow and emit mechanical
+"""Phase B helper: classify each Input node of a Prep flow and emit mechanical
 findings as JSON.
 
-Run after Phase A (flow.json available) and Phase B (deploy-context.md
-available, scoped to BOTH target_path and the parent projects of any PDS
-Input). Output JSON is consumed by the prep-extractor fork's LLM, which then
-writes a human-readable proposal markdown (input-dispatch.md) and asks the
-caller (main agent) to relay confirmation decisions to the user.
+Invoked by Phase B (cloud context extraction) after get_project_structure.py
+has produced deploy-context.md. The script is run twice when re-scan is needed:
+first to discover the parent projects of PDS Inputs that fall outside
+target_path (so the caller can re-invoke get_project_structure.py with
+--also-scan), then again against the updated deploy-context.md to finalize
+LUID resolution. Output JSON is consumed by prep-architect, which folds the
+findings into its decomposition plan and surfaces a single unified user
+confirmation (Stop 2) covering both .tfl decomposition and Input policy /
+rename proposals.
 
-Mechanical responsibilities (handled here, NOT by the LLM):
+Mechanical responsibilities (handled here, NOT by any LLM):
 - Classify each Input via flow_io.inspect_input_node (pds / vconn / direct_db /
-  extract / unknown)
+  extract). `unknown` is treated as a hard error: if encountered the script
+  exits 2 because it indicates the Skill premise is broken (Prep version drift
+  or malformed flow). Running architect on top of it would produce a
+  half-defined plan.
 - For PDS Inputs: try to resolve PDS LUID by scanning deploy-context.md for a
-  (projectName, datasourceName) match. Emit `pds_luid_candidate` when 1 unique
-  match, `pds_luid_ambiguous` with the list when 2+, `pds_luid_unresolved`
-  when 0.
+  (projectName, datasourceName) match. Emit `resolved` when 1 unique match,
+  `ambiguous` with the list when 2+, `unresolved` when 0.
 - For vconn Inputs: collect resourceId (vconn LUID) directly from the base
   connection plus the bracket-parsed table_uuid/table_name.
-- For direct_db Inputs: emit `block` with the underlying connection class so
-  the LLM can write a precise escalation message.
+- For direct_db Inputs: record the underlying connection class so architect
+  can write a precise Cloud-side provisioning ask.
 - For ANY Input: collect the field list (name + caption + datatype) with
-  isGenerated=True entries filtered out. The LLM will use this list to
-  propose snake_case rename / cast / hide policies in the input-dispatch
-  proposal markdown.
+  isGenerated=True entries filtered out.
 
-The LLM's responsibilities (downstream of this script):
-- Semantic translation of non-ASCII captions to snake_case English
-- Compose the per-Input policy proposal (passthrough / augment / block) and the
-  policy-level Transforms summary
-- Emit input-dispatch.md
+Architect's responsibilities (downstream of this script):
+- Semantic translation of non-ASCII captions (e.g. 数量 -> quantity)
+- Compose the per-Input policy (passthrough / augment / needs_provisioning)
+- Surface a single Stop 2 review covering both decomposition and Input policy
 
 Usage:
     python dispatch_inputs.py \
@@ -38,6 +41,7 @@ Usage:
 Exit codes:
     0   Success
     1   Argument / IO error
+    2   At least one Input classified as `unknown` (Skill premise broken)
 """
 from __future__ import annotations
 
@@ -290,6 +294,18 @@ def main() -> int:
         file=sys.stderr,
     )
     print(f"RESULT_JSON: {json.dumps({'output': str(out_path), 'input_count': len(inputs), 'kind_counts': payload['kind_counts']})}")
+
+    unknown_inputs = [r for r in inputs if r["kind"] == "unknown"]
+    if unknown_inputs:
+        names = ", ".join(f"{r['node_name']!r} ({r.get('node_type')})" for r in unknown_inputs)
+        print(
+            f"[dispatch_inputs] ERROR: {len(unknown_inputs)} Input(s) classified "
+            f"as 'unknown': {names}. This indicates the Skill premise is broken "
+            f"(unsupported Prep version or malformed flow). Update flow_io."
+            f"inspect_input_node before running architect.",
+            file=sys.stderr,
+        )
+        return 2
     return 0
 
 
