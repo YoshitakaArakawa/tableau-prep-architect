@@ -12,15 +12,21 @@ note: 各レイヤの「やる/やらない」、レイヤ判定の決定木、a
 
 ### staging (`stg_*`)
 
+stg は **column-level 操作だけ** に閉じる。row-level 操作 (フィルタ / 値置換 / NULL 補完) や集約・結合は intermediate へ。これは [prep-pds-augmenter](../.claude/skills/prep-pds-augmenter/SKILL.md) で stg を Live PDS (vconn-backed) として表現できる範囲に合わせた制約 — augmenter が表現可能なのは rename / cast / hide のみ。
+
 | やる | やらない |
 |---|---|
-| 1 ソースに対する型キャスト | JOIN（同ソース内の self-join も避ける） |
-| 列リネーム | ビジネスロジック・計算ルール |
-| 最低限のクレンジング（NULL 処理、明らかな欠損補完） | 集約 |
-| Tableau の Input ノード（**仮想接続 / Published DS** が前提、[input-policy](input-policy.md)） | 他レイヤへの直接依存 |
-| **Published DS への出力 (全レイヤ統一、`stg_*` 名で publish)** — 下流 intermediate が PDS として参照する。Cloud では flow 間 chain は PDS 経由が前提で、Hyper file 出力は cross-flow 共有不可 | 中間 Hyper のみで止める運用 |
+| 1 ソースに対する型キャスト (`cast`) | JOIN（同ソース内の self-join も避ける） |
+| 列リネーム (`rename`) | ビジネスロジック・計算ルール |
+| 不要列の hide (`hide`) | 集約 |
+| Tableau の Input ノード（**仮想接続 / Published DS** が前提、[input-policy](input-policy.md)） | フィルタ・行削除 (IS NOT NULL / WHERE 相当も含めて int 送り) |
+| **Published DS への出力 (全レイヤ統一、`stg_*` 名で publish)** — 下流 intermediate が PDS として参照する。Cloud では flow 間 chain は PDS 経由が前提で、Hyper file 出力は cross-flow 共有不可 | 値置換・クレンジング (REPLACE / TRIM / FixCase 等も含めて int 送り) |
+| | 他レイヤへの直接依存 |
+| | 中間 Hyper のみで止める運用 |
 
-**目安**: 1 stg .tfl は **ノード 5〜15 個**。これを超えるなら staging の責務を逸脱している。
+**目安**: 1 stg は **ノード 5〜15 個相当の column 操作**。row-level 操作を 1 つでも含むなら staging の責務を逸脱しているサイン。
+
+**マテリアライゼーション**: stg は **input が vconn (virtual connection) のとき Live PDS として publish** (`materialization: live_pds`、[prep-pds-augmenter](../.claude/skills/prep-pds-augmenter/SKILL.md) 経由)。**input が vconn 以外 (file / extract / 直接 DB) のときは現状サポート外 — 当該 stg は build/deploy を skip し warning を出して escalation** (将来的に .tfl フォールバック分岐を追加予定)。判定は prep-builder が flow.json の Input ノード種別から自動で行う。
 
 ### intermediate (`int_*`)
 
@@ -62,7 +68,8 @@ mart 層は次の三本立て + 事前集計派生で構成:
 
 | シグナル | 判断 |
 |---|---|
-| 1 ソースの直接整形のみ | → staging |
+| 1 ソースの column 操作のみ (rename / cast / hide) | → staging |
+| 1 ソースだが row-level 操作 (フィルタ / 値置換 / クレンジング) を含む | → intermediate (stg では表現不可) |
 | 異なるソースを JOIN している | → intermediate |
 | 粒度が変わる集約をしている（行レベル → 顧客レベル等） | → intermediate（marts ではない） |
 | ビジネスロジック（売上区分・有効フラグ生成等） | → intermediate |
@@ -106,13 +113,15 @@ Clean ステップ 1 つが：
 
 | actions の内容 | 推奨レイヤ |
 |---|---|
-| Rename + ChangeColumnType + 簡単な RemoveColumns | **stg** |
-| TrimWhitespace + FixCase + 単純 ReplaceValue | **stg** |
-| 軽いフィルタ（IS NOT NULL 等） | **stg** |
+| Rename + ChangeColumnType + 簡単な RemoveColumns (= hide 相当) | **stg** |
+| TrimWhitespace + FixCase + 単純 ReplaceValue | **int** (row-level、stg では表現不可) |
+| 軽いフィルタ（IS NOT NULL 等） | **int** (row-level、stg では表現不可) |
 | 計算列（純粋関数・業務ルール）の AddColumn | **int** |
 | GroupValues（ビジネスロジック由来） | **int** |
 | 複雑な ReplaceValue（業務マッピング） | **int** |
 | UI 向け列リネーム・最終並べ替え | **mart** |
+
+**stg = column 属性編集のみ** という制約は augmenter (rename / cast / hide) の表現可能範囲に揃えた結果。row 単位の操作は全部 int 以降。
 
 → **1 つの SuperTransform に複数レイヤに跨る actions が混在するケースが頻繁** にある（stg 相当の Rename と int 相当の AddColumn が同居）。
 

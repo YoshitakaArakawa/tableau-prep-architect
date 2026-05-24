@@ -1,6 +1,6 @@
 ---
 name: prep-extractor
-description: Tableau Prep の .tfl / .tflx / flow.json およびサーバー上のプロジェクト階層を読み、後段が直接 JSON / REST を見なくて済むコンパクトな markdown サマリに再構成する Skill。flow extraction（flow-summary.md）と cloud structure extraction（deploy-context.md）の 2 つのフェーズを持つ。大きな Prep フロー（数十〜数百ノード）を解析・分解する前、または Tableau Cloud に publish する前に必ず実行する。prep-architect の analyze/decompose、prep-deployer の preflight/publish の前段の前処理。ユーザーが「フローを extract して」「flow-summary を作って」「publish 先のプロジェクトを確認して」と言ったときに起動。サーバー上のフローを DL したい場合もここから（list_flows.py / download_flow.py）。
+description: Tableau Prep の .tfl / .tflx / flow.json およびサーバー上のプロジェクト階層を読み、後段が直接 JSON / REST を見なくて済むコンパクトな markdown サマリに再構成する Skill。flow extraction（flow-summary.md）/ cloud structure extraction（deploy-context.md）/ input dispatch (input-dispatch.md) の 3 つのフェーズを持つ。大きな Prep フロー（数十〜数百ノード）を解析・分解する前、または Tableau Cloud に publish する前に必ず実行する。prep-architect の analyze/decompose、prep-deployer の preflight/publish の前段の前処理。Phase C は各 Input の取扱方針 (passthrough / augment / block) を AI 提案 → ユーザー確認の形で確定する。ユーザーが「フローを extract して」「flow-summary を作って」「publish 先のプロジェクトを確認して」「Input の方針を決めて」と言ったときに起動。サーバー上のフローを DL したい場合もここから（list_flows.py / download_flow.py）。
 context: fork
 model: claude-haiku-4-5-20251001
 allowed-tools: Read Write Bash(python *) Bash(mkdir *) Glob Grep
@@ -14,10 +14,11 @@ Tableau Prep のフロー定義 JSON および Tableau Server/Cloud のプロジ
 
 | フェーズ | 入力 | 出力 | スクリプト |
 |---|---|---|---|
-| **Flow extraction** | `.tfl` / `.tflx` / `flow.json` | `flow-summary.md` | `inspect_actions.py` 等 |
-| **Cloud structure extraction** | 親プロジェクト path / LUID | `deploy-context.md` | `get_project_structure.py` |
+| **A: Flow extraction** | `.tfl` / `.tflx` / `flow.json` | `flow-summary.md` | `inspect_actions.py` 等 |
+| **B: Cloud structure extraction** | 親プロジェクト path / LUID | `deploy-context.md` | `get_project_structure.py` |
+| **C: Input dispatch** | flow.json + deploy-context.md | `input-dispatch.md` (proposal → ユーザー確認後 confirmed) | `dispatch_inputs.py` |
 
-両フェーズは独立して呼べる（順序は問わない）。decompose 時点で両方揃っているのが理想。
+Phase A / B は独立して呼べる (順序は問わない)。Phase C は A と B の両方の出力に依存するため、A → B → C の順序が事実上必要。decompose 時点で 3 ファイル全部揃っているのが理想。
 
 ## Caller から渡される入力
 
@@ -109,13 +110,51 @@ Tableau Server/Cloud 上の **publish 先プロジェクト階層** を REST API
 
 ---
 
+# Phase C: Input dispatch
+
+分解元 Prep フローの各 Input ノードについて、後段 architect / builder がどう扱うかを **AI 提案 + ユーザー確認** で確定する。Phase A の flow.json と Phase B の deploy-context.md の両方が前提。
+
+## なぜこのフェーズが必要か
+
+- Input 種別 (構造) は `flow_io.inspect_input_node()` で決定論的に取れるが、**取扱方針 (整形済 PDS なので passthrough か / raw vconn なので augment か / direct DB なので block か)** は業務判断であり auto-detect 禁止
+- direct_db Input は **Prep に認証情報を埋め込まない方針** のため本ワークフローではサポート外。ユーザーに「Cloud 側で先に仮想接続化 / PDS 化」を促す escalation 出口が必要
+- 日本語 caption の snake_case 化など列名 semantic 提案は LLM 仕事 (機械翻訳不可能、業務文脈推定が必要)。fork 内で AI が提案を起こし、ユーザーが行単位で受け入れ/上書き
+
+## 入力
+
+| 入力 | 扱い |
+|---|---|
+| `flow.json` (Phase A 出力 or 同等) | Input ノード分類 + vconn metadata 抽出 + 列メタ |
+| `deploy-context.md` (Phase B 出力) | PDS Input の LUID 解決に使用。target_path + **Input PDS 親プロジェクト** を `--also-scan` で含めて Phase B を回した結果を渡すのが理想 |
+| 出力先 `input-dispatch.md` のパス | 典型: `work/<yyyymmdd>_<tag>/reports/input-dispatch.md` |
+
+## 出力
+
+メイン会話への戻り値の末尾に **`## Timing` ブロック** を必ず含める ([references/skill-timing-contract.md](../../../references/skill-timing-contract.md))。Phase C の breakdown 推奨項目: `mech classify (dispatch_inputs.py)` / `proposal compose (LLM)` / `write`。
+
+**`input-dispatch.md`** 1 枚 (`status: pending` で書き出し、ユーザー確認後に main agent が `confirmed` に上書き)。書式は [references/input-dispatch-format.md](references/input-dispatch-format.md)、詳細手順 (mechanical script vs LLM 責務分担 / policy 提案ルール / block 時の escalation 文) は [references/phase-c-procedure.md](references/phase-c-procedure.md) を Read で取得。
+
+## 手順
+
+1. `scripts/dispatch_inputs.py` を実行して mechanical findings JSON を取得 (Input 分類 / PDS LUID 解決 / vconn metadata / 列メタ整理)
+2. JSON を読んで Input ごとに policy 提案 (passthrough / augment / block) と policy 級 Transforms 提案を組み立て
+3. 非 ASCII caption (日本語等) は semantic translation を提案 (`数量` → `quantity`)、ASCII は機械的 snake_case 化
+4. block (direct_db / extract / unknown) があれば session 全体停止の escalation 文を含める
+5. proposal markdown を `status: pending` で書き出してメイン会話に戻す (main agent がユーザー確認 → confirmed に書き換え)
+
+## block 検出時の挙動
+
+`blocks_present: true` のときは frontmatter にも本文にも明示。main agent は decompose に進まず Cloud 側整備 (vconn 化 / PDS 化) をユーザーに依頼する。再開時は Phase A から (flow 自体が変わるため)。
+
+---
+
 ## 後段への引き渡し
 
 | 後段 Skill | 渡すファイル |
 |---|---|
-| prep-architect (analyze / decompose) | `flow-summary.md` + `deploy-context.md`（あれば） |
+| prep-architect (analyze / decompose) | `flow-summary.md` + `deploy-context.md` + `input-dispatch.md` (confirmed) |
 | prep-builder | `decomposition-plan.md`（prep-architect 出力） |
 | prep-deployer (preflight) | `deploy-context.md` |
-| prep-deployer (publish) | `flows/**/*.tfl` + `deploy-context.md` |
+| prep-deployer (publish) | `flows/**/*.tfl` + `flows/staging/*.augmenter.json` + `deploy-context.md` |
 
 後段 Skill は flow.json や REST API を **直接叩かず**、本 Skill の出力 markdown のみを読む。

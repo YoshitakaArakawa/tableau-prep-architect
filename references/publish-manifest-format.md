@@ -53,6 +53,7 @@ CLI は repo 直下 [scripts/publish_manifest.py](../scripts/publish_manifest.py
     {
       "name": "fct_transactions_summary",
       "layer": "marts",
+      "kind": "tfl",
       "tfl_path": "flows/marts/fct_transactions_summary.tfl",
       "source_original_output_name": "stockmarket_transaction_prepped",
       "publish": {
@@ -69,6 +70,29 @@ CLI は repo 直下 [scripts/publish_manifest.py](../scripts/publish_manifest.py
         {
           "name": "fct_transactions_summary",
           "luid": "474dbbf2-0e48-4013-85cd-225ea9ce074c"
+        }
+      ]
+    },
+    {
+      "name": "stg_vconn__transactions",
+      "layer": "staging",
+      "kind": "pds_augment",
+      "augmenter_spec_path": "flows/staging/stg_vconn__transactions.augmenter.json",
+      "source_original_output_name": null,
+      "publish": {
+        "status": "published",
+        "pds_luid": "8b3e4a2c-...",
+        "published_at": "2026-05-24T11:05:00+09:00"
+      },
+      "run": {
+        "status": "n/a",
+        "finish_code": null,
+        "run_at": null
+      },
+      "outputs": [
+        {
+          "name": "stg_vconn__transactions",
+          "luid": "8b3e4a2c-..."
         }
       ]
     }
@@ -100,15 +124,19 @@ CLI は repo 直下 [scripts/publish_manifest.py](../scripts/publish_manifest.py
 
 | key | type | 必須 | 説明 |
 |---|---|---|---|
-| `name` | string | ✅ | .tfl ファイル名 (拡張子なし) = flow 名 = PDS 名 (本リポ規約) |
+| `name` | string | ✅ | flow 名 = PDS 名 (本リポ規約)。`.tfl` 拡張子なし |
 | `layer` | string | ✅ | `staging` / `intermediate` / `marts` |
-| `tfl_path` | string | ✅ | `session_work_dir` からの相対パス (例: `flows/marts/<name>.tfl`) |
+| `kind` | string | ✅ | `tfl` (Prep flow を publish + run) または `pds_augment` (prep-pds-augmenter で Live PDS を直接 publish、run なし) |
+| `tfl_path` | string | `kind=tfl` 時必須 | `session_work_dir` からの相対パス (例: `flows/marts/<name>.tfl`) |
+| `augmenter_spec_path` | string | `kind=pds_augment` 時必須 | augmenter spec.json への相対パス (例: `flows/staging/<name>.augmenter.json`) |
 | `source_original_output_name` | string \| null | ✅ | 元フローのどの output PDS に対応するか。元フローの output と対応関係のある flow (通常は marts、元が intermediate 相当の PDS を直接出していたケースは int も) は非 null、分解で新規生成された flow (stg / 中間 PDS) は null |
-| `publish` | object | ✅ | 後述 |
-| `run` | object | ✅ | 後述 |
-| `outputs` | array of {`name`, `luid`} | ✅ | この flow の PublishExtract 出力 (init 時 flow.json から抽出、複数あり得る)。**全レイヤ Published DS を出力する前提**のため通常 1 件以上 (空配列は想定外)。`luid` は `resolve-luids` で埋まる |
+| `publish` | object | ✅ | 後述 (kind により形が変わる) |
+| `run` | object | ✅ | 後述 (`kind=pds_augment` では常に `status=n/a`) |
+| `outputs` | array of {`name`, `luid`} | ✅ | この flow の出力。`kind=tfl` は flow.json の PublishExtract から抽出、`kind=pds_augment` は augmenter spec の `target.new_name` 1 件。`luid` は `resolve-luids` で埋まる |
 
 ### `decomposed_flows[].publish`
+
+`kind=tfl` のとき:
 
 | key | type | 値 | 説明 |
 |---|---|---|---|
@@ -116,13 +144,19 @@ CLI は repo 直下 [scripts/publish_manifest.py](../scripts/publish_manifest.py
 | `flow_luid` | string \| null | LUID | publish 成功時に Tableau Cloud 上の flow LUID |
 | `published_at` | ISO-8601 \| null | timestamp | publish 成功時刻 |
 
+`kind=pds_augment` のとき: `flow_luid` の代わりに `pds_luid` (publish された Live PDS の LUID) を持つ。`status` / `published_at` は共通。
+
 ### `decomposed_flows[].run`
+
+`kind=tfl` のとき:
 
 | key | type | 値 | 説明 |
 |---|---|---|---|
 | `status` | string | `pending` \| `success` \| `failed` \| `skipped` | run 状態。`skipped` は publish 失敗で run を試行しなかった場合 |
 | `finish_code` | int \| null | 0 / 1 / 2 | Tableau Cloud の finishCode (0=Success, 1=Failed, 2=Cancelled)。run.status は finish_code から決定 |
 | `run_at` | ISO-8601 \| null | timestamp | run 完了時刻 |
+
+`kind=pds_augment` のとき: Live PDS は materialize する run フェーズを持たないため `status=n/a` 固定。`finish_code=null` / `run_at=null`。deployer はこの kind を見ると run 呼び出しを skip し、manifest を `status=n/a` のままにする。
 
 ## ライフサイクル
 

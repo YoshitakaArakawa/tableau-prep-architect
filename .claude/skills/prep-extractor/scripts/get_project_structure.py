@@ -57,6 +57,13 @@ def parse_args():
     grp.add_argument("--project-id", help="Project LUID")
     p.add_argument("-o", "--output", required=True,
                    help="Output deploy-context.md path")
+    p.add_argument("--also-scan", action="append", default=[],
+                   help="Additional 'Parent/Child' project path to include in "
+                        "the datasource scan. Repeat for multiple paths. "
+                        "Use this to bring Input PDS parent projects (e.g. "
+                        "'0_Datasource' shared across flows) into scope so "
+                        "Phase C (input-dispatch) can resolve their LUIDs. "
+                        "Missing paths are reported as warnings, not errors.")
     return p.parse_args()
 
 
@@ -149,6 +156,36 @@ def fetch_flows_in_subtree(server, project_ids):
     return [(f.project_id, f) for f in flows if f.project_id in project_ids]
 
 
+def fetch_datasources_in_subtree(server, project_ids):
+    """Return list of (project_id, DatasourceItem) for PDSes in any of the given projects."""
+    req = TSC.RequestOptions()
+    req.pagesize = 1000
+    dsl = []
+    page = 1
+    while True:
+        req.pagenumber = page
+        items, pag = server.datasources.get(req)
+        dsl.extend(items)
+        if pag.page_number * pag.page_size >= pag.total_available:
+            break
+        page += 1
+    return [(d.project_id, d) for d in dsl if d.project_id in project_ids]
+
+
+def collect_subtree_ids(all_projects, root_id: str) -> set[str]:
+    """All descendant project ids reachable from root_id (inclusive)."""
+    result = {root_id}
+    frontier = [root_id]
+    while frontier:
+        nxt = []
+        for pid in frontier:
+            kids = [p.id for p in all_projects if p.parent_id == pid]
+            nxt.extend(kids)
+            result.update(kids)
+        frontier = nxt
+    return result
+
+
 def check_writeable(server, project) -> str:
     """Best-effort: report ProjectItem.writeable if populated; else 'unknown'."""
     try:
@@ -167,7 +204,8 @@ def check_writeable(server, project) -> str:
 def render(target, target_path, target_status, target_writeable,
            existing_chain, existing_prefix_path, pending_segments,
            server_url, site_name,
-           children, flows_in_subtree, all_projects):
+           children, flows_in_subtree, all_projects,
+           datasources_in_scope=None, also_scan_results=None):
     """Render deploy-context.md.
 
     Model: the "target" is the direct parent of `flows/` and `datasources/`
@@ -355,6 +393,51 @@ def render(target, target_path, target_status, target_writeable,
             lines.append(f"| `{proj_name}` | `{f.name}` | `{f.id}` |")
     lines.append("")
 
+    # Additional scanned subtrees (Input PDS parents etc.). Lists the resolved
+    # paths so consumers know what's in scope, and surfaces unresolved entries.
+    if also_scan_results is not None:
+        lines.append("## Also-scanned project paths")
+        lines.append("")
+        if not also_scan_results:
+            lines.append("_(none — only the target subtree was scanned for datasources.)_")
+        else:
+            lines.append("| requested path | resolved? | project LUID | descendant count |")
+            lines.append("|---|---|---|---|")
+            for r in also_scan_results:
+                if r["resolved"]:
+                    lines.append(
+                        f"| `{r['requested']}` | yes | `{r['luid']}` | {r['descendant_count']} |"
+                    )
+                else:
+                    lines.append(
+                        f"| `{r['requested']}` | **NO** | — | — |  *(skipped from datasource scan)*"
+                    )
+        lines.append("")
+
+    # Datasources (PDS) in the union of target subtree + any also-scanned
+    # subtrees. Consumed by prep-extractor Phase C (dispatch_inputs.py) to
+    # resolve PDS LUIDs by (project_path, name).
+    lines.append("## Datasources in scope")
+    lines.append("")
+    if datasources_in_scope is None:
+        lines.append("_(skipped — datasource scan not requested.)_")
+    elif not datasources_in_scope:
+        lines.append("_(none — no PDS found in target subtree or also-scanned subtrees.)_")
+    else:
+        lines.append("Use this section to resolve PDS LUIDs from `(projectName, datasourceName)`.")
+        lines.append("")
+        lines.append("| project path | name | LUID |")
+        lines.append("|---|---|---|")
+        for proj_id, ds in sorted(
+            datasources_in_scope,
+            key=lambda x: (project_path(all_projects, by_id.get(x[0])) if x[0] in by_id else "",
+                           x[1].name or ""),
+        ):
+            proj = by_id.get(proj_id)
+            ppath = project_path(all_projects, proj) if proj else "?"
+            lines.append(f"| {ppath} | {ds.name} | {ds.id} |")
+    lines.append("")
+
     lines.append("## Next step")
     lines.append("")
     lines.append("Pass this file's path to:")
@@ -363,6 +446,8 @@ def render(target, target_path, target_status, target_writeable,
     lines.append("- **prep-deployer (preflight)** — iterates `pending_segments` to reach target, ")
     lines.append("  then ensures `flows/` and `datasources/` exist under target, then ensures ")
     lines.append("  `stg / intermediate / marts` exist under each (2x3 = 6 dbt layer projects).")
+    lines.append("- **prep-extractor Phase C (dispatch_inputs.py)** — reads `## Datasources in scope` to ")
+    lines.append("  resolve PDS LUIDs for each Input node of the source flow.")
     return "\n".join(lines) + "\n"
 
 
@@ -414,24 +499,53 @@ def main():
 
         if target is not None:
             children = [p for p in all_projects if p.parent_id == target.id]
-            subtree_ids = {target.id}
-            frontier = [target.id]
-            while frontier:
-                new_frontier = []
-                for pid in frontier:
-                    kids = [p.id for p in all_projects if p.parent_id == pid]
-                    new_frontier.extend(kids)
-                    subtree_ids.update(kids)
-                frontier = new_frontier
+            subtree_ids = collect_subtree_ids(all_projects, target.id)
             flows_in_subtree = fetch_flows_in_subtree(server, subtree_ids)
         else:
             children = []
             flows_in_subtree = []
+            subtree_ids = set()
+
+        # Resolve --also-scan paths and union their subtree ids for datasource
+        # scan. Missing paths are warned, not errors.
+        also_scan_results: list[dict] = []
+        ds_scope_ids: set[str] = set(subtree_ids)
+        for path in args.also_scan:
+            try:
+                proj, _chain, pending, status = resolve_path(all_projects, path)
+            except ValueError as e:
+                print(f"[also-scan] WARNING: cannot resolve {path!r}: {e}", file=sys.stderr)
+                also_scan_results.append({"requested": path, "resolved": False,
+                                          "luid": None, "descendant_count": 0})
+                continue
+            if status != "exists" or proj is None:
+                print(f"[also-scan] WARNING: {path!r} not fully present (status={status})",
+                      file=sys.stderr)
+                also_scan_results.append({"requested": path, "resolved": False,
+                                          "luid": None, "descendant_count": 0})
+                continue
+            subset = collect_subtree_ids(all_projects, proj.id)
+            ds_scope_ids.update(subset)
+            also_scan_results.append({"requested": path, "resolved": True,
+                                      "luid": proj.id, "descendant_count": len(subset)})
+
+        # Always scan datasources within the union scope (target + also-scan).
+        # An empty scope (target pending, no also-scan) yields [].
+        datasources_in_scope = (
+            fetch_datasources_in_subtree(server, ds_scope_ids) if ds_scope_ids else []
+        )
+        print(
+            f"[info] datasources_in_scope: {len(datasources_in_scope)} from "
+            f"{len(ds_scope_ids)} project(s)",
+            file=sys.stderr,
+        )
 
         text = render(target, target_path, target_status, target_writeable,
                       existing_chain, existing_prefix_path, pending_segments,
                       server.server_address, server.site_id,
-                      children, flows_in_subtree, all_projects)
+                      children, flows_in_subtree, all_projects,
+                      datasources_in_scope=datasources_in_scope,
+                      also_scan_results=also_scan_results)
         output.write_text(text, encoding="utf-8")
         print(f"Wrote deploy-context: {output}")
         print(f"  target:   {target_path}  ({target.id if target else 'PENDING'})")

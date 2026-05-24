@@ -30,32 +30,36 @@ build フェーズは別 Skill ([prep-builder](../prep-builder/SKILL.md))。publ
 
 ### Publish
 
-prep-builder が生成した .tfl 群を、Tableau Server/Cloud 上の dbt 風プロジェクト階層 ([../../../references/project-hierarchy.md](../../../references/project-hierarchy.md)) に publish する。Preflight が先に走り、サブプロジェクトが揃っている前提。
+prep-builder が生成した成果物 (`flows/<layer>/*.tfl` および `flows/staging/*.augmenter.json`) を、Tableau Server/Cloud 上の dbt 風プロジェクト階層 ([../../../references/project-hierarchy.md](../../../references/project-hierarchy.md)) に publish する。Preflight が先に走り、サブプロジェクトが揃っている前提。
 
 | 項目 | 内容 |
 |---|---|
-| 入力 | `flows/{staging,intermediate,marts}/*.tfl` + `deploy-context.md` (target LUID 取得用) |
-| 出力 | Tableau Cloud 上に publish 済み Flow |
+| 入力 | `flows/{staging,intermediate,marts}/*.tfl` (kind=tfl) + `flows/staging/*.augmenter.json` (kind=pds_augment) + `deploy-context.md` (target LUID 取得用) |
+| 出力 | Tableau Cloud 上に publish 済み Flow / Live PDS |
 | 副作用 | サーバー副作用あり |
 | 承認 | session intake の goal=④ 指定で合意済み。失敗時は [autonomous-recovery](references/autonomous-recovery.md) で分類 → 自律リトライ or escalation |
 
 手順:
 1. `deploy-context.md` で **dbt layer presence が全て yes** であることを確認 (不足があれば Preflight に戻る)
-2. 各 .tfl をレイヤ対応プロジェクトに publish (embed credentials は必要に応じて)
-3. publish 1 件ごとに [scripts/publish_manifest.py update-publish](../../../scripts/publish_manifest.py) で `publish-manifest.json` を更新 (LUID と status を記録、詳細は [../../../references/publish-manifest-format.md](../../../references/publish-manifest-format.md))
-4. HTTP エラーが出たら errorCode を [autonomous-recovery.md の publish 表](references/autonomous-recovery.md) で分類
+2. `publish-manifest.json` を読み、各 decomposed entry を **kind dispatch**:
+   - `kind=tfl` → `scripts/publish_flow.py` でレイヤ対応プロジェクトに .tfl を publish (embed credentials は必要に応じて)
+   - `kind=pds_augment` → `python .claude/skills/prep-pds-augmenter/scripts/augment_pds.py --spec <augmenter_spec_path> --out-dir <session>/augmenter_out/<name>/` を呼ぶ。`RESULT_JSON` を parse して `published_luid` を取得
+3. publish 1 件ごとに [scripts/publish_manifest.py update-publish](../../../scripts/publish_manifest.py) で manifest を更新:
+   - `kind=tfl`: `--flow-luid <luid>` を渡す
+   - `kind=pds_augment`: `--pds-luid <luid>` を渡す (manifest 側は自動的に `outputs[0].luid` にもミラー)
+4. HTTP / augmenter エラーが出たら errorCode を [autonomous-recovery.md の publish 表](references/autonomous-recovery.md) で分類
 
 詳細手順: [references/publish-recipe.md](references/publish-recipe.md)
 プロジェクト階層: [../../../references/project-hierarchy.md](../../../references/project-hierarchy.md)
-スクリプト: `scripts/create_projects.py`, `scripts/publish_flow.py`, [../../../scripts/publish_manifest.py](../../../scripts/publish_manifest.py)
+スクリプト: `scripts/create_projects.py`, `scripts/publish_flow.py`, [.claude/skills/prep-pds-augmenter/scripts/augment_pds.py](../prep-pds-augmenter/scripts/augment_pds.py), [../../../scripts/publish_manifest.py](../../../scripts/publish_manifest.py)
 
 ### Run
 
-publish 済みの flow を Tableau Server/Cloud 上で実行する。
+publish 済みの flow を Tableau Server/Cloud 上で実行する。**`kind=pds_augment` の entry は Live PDS なので run フェーズを skip** (manifest 上は `run.status=n/a` のまま)。
 
 | 項目 | 内容 |
 |---|---|
-| 入力 | flow ID または name + project |
+| 入力 | flow ID または name + project (kind=tfl のみ対象) |
 | 出力 | ジョブ完了レポート (finishCode 0/1/2 + `RESULT_JSON: {...}` 行) |
 | 副作用 | サーバー副作用あり (production data 書き換え) |
 | 承認 | session intake の goal=④ 指定で合意済み。finishCode=1/2 時は [autonomous-recovery](references/autonomous-recovery.md) で分類 |

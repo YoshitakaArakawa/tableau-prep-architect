@@ -284,7 +284,7 @@ def cmd_init(args: argparse.Namespace) -> int:
 
     original = parse_flow_summary(summary_md)
 
-    # Scan flows/{layer}/*.tfl
+    # Scan flows/{layer}/ for both .tfl (kind=tfl) and *.augmenter.json (kind=pds_augment).
     decomposed: list[dict[str, Any]] = []
     for layer_dir in LAYER_DIRS:
         ldir = flows_dir / layer_dir
@@ -296,11 +296,34 @@ def cmd_init(args: argparse.Namespace) -> int:
             decomposed.append({
                 "name": name,
                 "layer": LAYER_DIR_TO_NAME[layer_dir],
+                "kind": "tfl",
                 "tfl_path": str(tfl.relative_to(flows_dir.parent)).replace("\\", "/"),
                 "source_original_output_name": source_by_flow.get(name),
                 "publish": {"status": "pending", "flow_luid": None, "published_at": None},
                 "run": {"status": "pending", "finish_code": None, "run_at": None},
                 "outputs": outs,
+            })
+        for spec_path in sorted(ldir.glob("*.augmenter.json")):
+            # name strips both .json and .augmenter suffixes to match the PDS name
+            name = spec_path.stem
+            if name.endswith(".augmenter"):
+                name = name[: -len(".augmenter")]
+            try:
+                spec = json.loads(spec_path.read_text(encoding="utf-8"))
+                target_name = (spec.get("target") or {}).get("new_name") or name
+            except (json.JSONDecodeError, OSError):
+                target_name = name
+            decomposed.append({
+                "name": name,
+                "layer": LAYER_DIR_TO_NAME[layer_dir],
+                "kind": "pds_augment",
+                "augmenter_spec_path": str(spec_path.relative_to(flows_dir.parent)).replace("\\", "/"),
+                "source_original_output_name": source_by_flow.get(name),
+                "publish": {"status": "pending", "pds_luid": None, "published_at": None},
+                # Live PDS has no materialize phase; run is recorded as n/a so the
+                # deployer can skip it without flagging a missing run.
+                "run": {"status": "n/a", "finish_code": None, "run_at": None},
+                "outputs": [{"name": target_name, "luid": None}],
             })
 
     if not decomposed:
@@ -343,14 +366,32 @@ def cmd_update_publish(args: argparse.Namespace) -> int:
     path = Path(args.manifest)
     m = load_manifest(path)
     df = find_decomposed(m, args.flow_name)
+    kind = df.get("kind", "tfl")
     df["publish"]["status"] = args.status
     if args.status == "published":
-        df["publish"]["flow_luid"] = args.flow_luid
-        df["publish"]["published_at"] = jst_now_iso()
+        if kind == "pds_augment":
+            # PDS LUID lives under 'pds_luid' for augment entries (no flow_luid).
+            if not args.pds_luid:
+                print(
+                    f"[publish_manifest] ERROR: --pds-luid is required when updating "
+                    f"a kind=pds_augment entry ({args.flow_name})",
+                    file=sys.stderr,
+                )
+                return 1
+            df["publish"]["pds_luid"] = args.pds_luid
+            df["publish"]["published_at"] = jst_now_iso()
+            # outputs[0].luid mirrors pds_luid for direct lookup by comparator.
+            if df.get("outputs"):
+                df["outputs"][0]["luid"] = args.pds_luid
+        else:
+            df["publish"]["flow_luid"] = args.flow_luid
+            df["publish"]["published_at"] = jst_now_iso()
     save_manifest(path, m)
+    luid_field = "pds_luid" if kind == "pds_augment" else "flow_luid"
+    luid_val = args.pds_luid if kind == "pds_augment" else args.flow_luid
     print(
-        f"[publish_manifest] update-publish: {args.flow_name} -> "
-        f"status={args.status}, flow_luid={args.flow_luid}",
+        f"[publish_manifest] update-publish: {args.flow_name} (kind={kind}) -> "
+        f"status={args.status}, {luid_field}={luid_val}",
         file=sys.stderr,
     )
     return 0
@@ -360,6 +401,14 @@ def cmd_update_run(args: argparse.Namespace) -> int:
     path = Path(args.manifest)
     m = load_manifest(path)
     df = find_decomposed(m, args.flow_name)
+    if df.get("kind") == "pds_augment":
+        # Live PDS entries have no run phase; reject silently-fatal misuse.
+        print(
+            f"[publish_manifest] ERROR: update-run not applicable to "
+            f"kind=pds_augment entry ({args.flow_name}); Live PDS has no run phase",
+            file=sys.stderr,
+        )
+        return 1
     fc = args.finish_code
     status = {0: "success", 1: "failed", 2: "failed"}.get(fc, "failed")
     df["run"]["status"] = status
@@ -402,6 +451,14 @@ def cmd_resolve_luids(args: argparse.Namespace) -> int:
 
         # 3. Decomposed flow LUIDs (if not set) + their output PDS LUIDs
         for df in m["decomposed_flows"]:
+            if df.get("kind") == "pds_augment":
+                # Live PDS entries have no flow to resolve; pds_luid was set at
+                # publish time. Still backfill outputs[0].luid from pds_luid in
+                # case an older entry pre-dates that mirror.
+                pds_luid = df["publish"].get("pds_luid")
+                if pds_luid and df.get("outputs") and not df["outputs"][0].get("luid"):
+                    df["outputs"][0]["luid"] = pds_luid
+                continue
             if not df["publish"].get("flow_luid"):
                 luid = _find_flow_luid_by_name(server, df["name"])
                 if luid is None:
@@ -450,11 +507,13 @@ def main() -> int:
 
     p_up = sub.add_parser("update-publish", help="Mark a decomposed flow as published or failed")
     p_up.add_argument("--manifest", required=True, help="Path to publish-manifest.json")
-    p_up.add_argument("--flow-name", required=True, help="Decomposed flow name (.tfl stem)")
+    p_up.add_argument("--flow-name", required=True, help="Decomposed flow name (.tfl stem or augmenter spec stem)")
     p_up.add_argument("--status", required=True, choices=["published", "failed"],
                       help="Publish outcome")
     p_up.add_argument("--flow-luid", default=None,
-                      help="Required when --status=published")
+                      help="Required when --status=published and the entry is kind=tfl")
+    p_up.add_argument("--pds-luid", default=None,
+                      help="Required when --status=published and the entry is kind=pds_augment")
     p_up.set_defaults(func=cmd_update_publish)
 
     p_ur = sub.add_parser("update-run", help="Record run finish_code for a flow")
@@ -470,8 +529,14 @@ def main() -> int:
 
     args = parser.parse_args()
 
-    if args.cmd == "update-publish" and args.status == "published" and not args.flow_luid:
-        parser.error("--flow-luid is required when --status=published")
+    if args.cmd == "update-publish" and args.status == "published":
+        # Exactly one of --flow-luid / --pds-luid is required; per-entry kind
+        # is checked inside cmd_update_publish for the right one.
+        if not args.flow_luid and not args.pds_luid:
+            parser.error(
+                "--flow-luid (kind=tfl) or --pds-luid (kind=pds_augment) is "
+                "required when --status=published"
+            )
 
     return args.func(args)
 

@@ -1,11 +1,19 @@
 """Augment a Tableau Published Data Source with transforms and Calculated Fields.
 
-Reads a spec JSON, downloads the source PDS as .tdsx, applies transforms
-(rename caption / hide column / cast type via hidden+calc) and/or injects
-<column><calculation/></column> elements into the .tds XML, republishes
-(CreateNew or Overwrite), and re-downloads to verify the edits survived.
+Reads a spec JSON, applies transforms (rename caption / hide column / cast type
+via hidden+calc) and/or injects <column><calculation/></column> elements into
+the .tds XML, publishes, and re-downloads to verify the edits survived.
 
-Supports both extract-based and live (virtual-connection backed) PDS.
+Source kinds:
+- "extract" — existing extract-based PDS. Download with include_extract=True,
+  edit XML, republish (CreateNew default / Overwrite optional).
+- "live"    — existing live (federated/virtual-connection backed) PDS.
+  Download with include_extract=False, edit XML, republish.
+- "vconn"   — no existing source PDS. Caller provides vconn LUID + table ref +
+  column list; this script builds a base .tds from scratch wrapping the vconn,
+  applies transforms, publishes (CreateNew only). Used by prep-builder when the
+  decomposed Prep flow's Input was a virtual connection and stg is to be
+  materialized as a Live PDS without going through Prep.
 
 See SKILL.md and references/tds-calc-field-format.md for the spec contract and
 XML shape.
@@ -25,9 +33,11 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import secrets
 import shutil
 import sys
 import time
+import uuid
 import zipfile
 from pathlib import Path
 from xml.sax.saxutils import escape as xml_escape
@@ -44,7 +54,7 @@ from tableau_auth import signed_in_server  # noqa: E402
 ALLOWED_DATATYPES = {"real", "integer", "string", "boolean", "date", "datetime"}
 ALLOWED_ROLES = {"measure", "dimension"}
 ALLOWED_TYPES = {"quantitative", "nominal", "ordinal"}
-ALLOWED_SOURCE_KINDS = {"extract", "live"}
+ALLOWED_SOURCE_KINDS = {"extract", "live", "vconn"}
 ALLOWED_TRANSFORM_OPS = {"rename", "cast", "hide"}
 
 DEFAULT_ROLE_BY_DATATYPE = {
@@ -71,6 +81,29 @@ DEFAULT_CAST_FUNCTION_BY_DATATYPE = {
     "datetime": "DATETIME",
     # boolean intentionally absent: no clean 1-arg cast function. Caller must
     # provide cast_formula explicitly if they need to derive a boolean.
+}
+
+# Defaults used only when source.kind='vconn' and the script must synthesize
+# <metadata-record> entries from scratch. These are best-effort stubs aligned
+# with what Tableau Cloud emits for a federated/publishedConnection source
+# (observed in work/20260524_pds_live_stg/Sample Vconn Datasource.tdsx). If a
+# vconn column needs a different remote-type or aggregation, the caller may
+# override per-column via spec.source.columns[].remote_type / .aggregation.
+DEFAULT_REMOTE_TYPE_BY_DATATYPE = {
+    "string": "130",
+    "integer": "20",
+    "real": "5",
+    "date": "7",
+    "datetime": "135",
+    "boolean": "11",
+}
+DEFAULT_AGGREGATION_BY_DATATYPE = {
+    "string": "Count",
+    "integer": "Sum",
+    "real": "Sum",
+    "date": "Year",
+    "datetime": "Year",
+    "boolean": "Count",
 }
 
 
@@ -184,27 +217,121 @@ def _validate_calcs(calcs: list) -> list[dict]:
     return normalized
 
 
+def _validate_vconn_columns(cols) -> list[dict]:
+    """Validate spec.source.columns[] for kind='vconn'. Returns normalized list."""
+    if not isinstance(cols, list) or not cols:
+        raise SpecError(
+            "spec.source.columns must be a non-empty list when source.kind='vconn' "
+            "(caller must enumerate every vconn-table column; auto-discovery is "
+            "not done by this Skill)"
+        )
+    seen_names = set()
+    seen_captions = set()
+    norm = []
+    for i, c in enumerate(cols):
+        if not isinstance(c, dict):
+            raise SpecError(f"spec.source.columns[{i}] must be an object")
+        for k in ("name", "caption", "datatype"):
+            if not c.get(k):
+                raise SpecError(f"spec.source.columns[{i}].{k} is required")
+        name = c["name"]
+        if not isinstance(name, str) or not name.startswith("["):
+            raise SpecError(
+                f"spec.source.columns[{i}].name must be a string starting with "
+                f"'[' (the internal bracket form), got {name!r}"
+            )
+        if name in seen_names:
+            raise SpecError(
+                f"spec.source.columns[{i}].name={name!r} duplicates an earlier column"
+            )
+        seen_names.add(name)
+        if c["caption"] in seen_captions:
+            raise SpecError(
+                f"spec.source.columns[{i}].caption={c['caption']!r} duplicates an earlier column"
+            )
+        seen_captions.add(c["caption"])
+        dt = c["datatype"]
+        if dt not in ALLOWED_DATATYPES:
+            raise SpecError(
+                f"spec.source.columns[{i}].datatype={dt!r} not in {sorted(ALLOWED_DATATYPES)}"
+            )
+        role = c.get("role") or DEFAULT_ROLE_BY_DATATYPE[dt]
+        if role not in ALLOWED_ROLES:
+            raise SpecError(
+                f"spec.source.columns[{i}].role={role!r} not in {sorted(ALLOWED_ROLES)}"
+            )
+        ctype = c.get("type") or DEFAULT_TYPE_BY_ROLE[role]
+        if ctype not in ALLOWED_TYPES:
+            raise SpecError(
+                f"spec.source.columns[{i}].type={ctype!r} not in {sorted(ALLOWED_TYPES)}"
+            )
+        remote_name = c.get("remote_name") or name.strip("[]")
+        norm.append({
+            "name": name,
+            "remote_name": remote_name,
+            "caption": c["caption"],
+            "datatype": dt,
+            "role": role,
+            "type": ctype,
+            "remote_type": str(c.get("remote_type", DEFAULT_REMOTE_TYPE_BY_DATATYPE[dt])),
+            "aggregation": c.get("aggregation", DEFAULT_AGGREGATION_BY_DATATYPE[dt]),
+        })
+    return norm
+
+
 def load_and_validate_spec(spec_path: Path) -> dict:
     raw = json.loads(spec_path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         raise SpecError(f"spec root must be an object, got {type(raw).__name__}")
 
     src = raw.get("source") or {}
-    if not isinstance(src, dict) or not src.get("luid"):
-        raise SpecError("spec.source.luid is required")
+    if not isinstance(src, dict):
+        raise SpecError("spec.source must be an object")
     kind = src.get("kind") or "extract"
     if kind not in ALLOWED_SOURCE_KINDS:
         raise SpecError(
             f"spec.source.kind={kind!r} not in {sorted(ALLOWED_SOURCE_KINDS)}"
         )
 
+    # Required source fields differ by kind:
+    #   extract/live -> source.luid (existing PDS)
+    #   vconn        -> source.vconn_luid + table_uuid + table_name + columns[]
+    source_luid = None
+    vconn_fields = None
+    if kind in {"extract", "live"}:
+        if not src.get("luid"):
+            raise SpecError(f"spec.source.luid is required when source.kind={kind!r}")
+        source_luid = src["luid"]
+    else:  # kind == "vconn"
+        for k in ("vconn_luid", "table_uuid", "table_name"):
+            if not src.get(k):
+                raise SpecError(f"spec.source.{k} is required when source.kind='vconn'")
+        vconn_columns = _validate_vconn_columns(src.get("columns"))
+        vconn_fields = {
+            "vconn_luid": src["vconn_luid"],
+            "vconn_caption": src.get("vconn_caption") or src["vconn_luid"],
+            "table_uuid": src["table_uuid"],
+            "table_name": src["table_name"],
+            "columns": vconn_columns,
+        }
+
     tgt = raw.get("target") or {}
     if not isinstance(tgt, dict) or not tgt.get("new_name"):
         raise SpecError("spec.target.new_name is required")
+    if kind == "vconn" and not tgt.get("project_id"):
+        raise SpecError(
+            "spec.target.project_id is required when source.kind='vconn' "
+            "(no source PDS to inherit project from)"
+        )
 
     mode = raw.get("mode") or "CreateNew"
     if mode not in {"CreateNew", "Overwrite"}:
         raise SpecError(f"spec.mode must be 'CreateNew' or 'Overwrite', got {mode!r}")
+    if kind == "vconn" and mode == "Overwrite":
+        raise SpecError(
+            "spec.mode='Overwrite' is not supported when source.kind='vconn' "
+            "(no source PDS to overwrite; use mode='CreateNew')"
+        )
 
     transforms_raw = raw.get("transforms") or []
     calcs_raw = raw.get("calcs") or []
@@ -213,9 +340,12 @@ def load_and_validate_spec(spec_path: Path) -> dict:
     if not isinstance(calcs_raw, list):
         raise SpecError("spec.calcs must be a list")
     if not transforms_raw and not calcs_raw:
-        raise SpecError(
-            "spec must include at least one of transforms[] or calcs[] (both empty)"
-        )
+        # vconn can publish a passthrough PDS without transforms (e.g. just
+        # exposing the vconn table as a Live PDS without column edits). Allow.
+        if kind != "vconn":
+            raise SpecError(
+                "spec must include at least one of transforms[] or calcs[] (both empty)"
+            )
 
     transforms = _validate_transforms(transforms_raw) if transforms_raw else []
     calcs = _validate_calcs(calcs_raw) if calcs_raw else []
@@ -234,8 +364,9 @@ def load_and_validate_spec(spec_path: Path) -> dict:
         seen.add(cap)
 
     return {
-        "source_luid": src["luid"],
+        "source_luid": source_luid,
         "source_kind": kind,
+        "vconn": vconn_fields,
         "target_project_id": tgt.get("project_id"),
         "new_name": tgt["new_name"],
         "mode": mode,
@@ -371,6 +502,122 @@ def rezip_tdsx(src_tdsx: Path, tds_entry_name: str, new_tds_bytes: bytes, dst_td
         for item in zin.infolist():
             data = new_tds_bytes if item.filename == tds_entry_name else zin.read(item.filename)
             zout.writestr(item, data)
+
+
+# ---------------------------------------------------------------------------
+# vconn-source base .tds construction (kind='vconn')
+# ---------------------------------------------------------------------------
+
+def build_base_tds_from_vconn(vconn: dict) -> tuple[str, str]:
+    """Construct a base .tds for a vconn-backed live PDS from scratch.
+
+    Template shape mirrors a published vconn-backed PDS observed in
+    work/20260524_pds_live_stg/Sample Vconn Datasource.tdsx (federated
+    connection wrapping a <connection class='publishedConnection'>).
+
+    Returns (ds_opaque_name, tds_text). ds_opaque_name is the formatted-name
+    suffix (without the 'federated.' prefix) - the same string is used to name
+    the .tds entry inside the wrapping .tdsx.
+
+    Cloud will re-introspect metadata-records on publish if the connection is
+    healthy, so the stubs we synthesize here are best-effort and only need to
+    parse cleanly.
+    """
+    ds_opaque = secrets.token_hex(16)
+    pc_opaque = secrets.token_hex(16)
+    object_hex = uuid.uuid4().hex.upper()
+
+    quote_map = {"'": "&apos;", '"': "&quot;"}
+    vc_cap_esc = xml_escape(vconn["vconn_caption"], quote_map)
+    table_name = vconn["table_name"]
+    table_name_attr = xml_escape(table_name, quote_map)
+    table_name_text = xml_escape(table_name)
+    safe_object_basename = re.sub(r"[^A-Za-z0-9_]", "_", table_name)
+    object_id = f"{safe_object_basename}_{object_hex}"
+    named_conn_name = f"publishedConnection.{pc_opaque}"
+    table_ref = f"[{vconn['table_uuid']}].[{table_name_attr}]"
+
+    md_records = []
+    for c in vconn["columns"]:
+        collation = (
+            "<collation flag='1' name='LEN_RUS_S2' />"
+            if c["datatype"] == "string"
+            else "<collation flag='0' name='LROOT' />"
+        )
+        md_records.append(
+            "      <metadata-record class='column'>\n"
+            f"        <remote-name>{xml_escape(c['remote_name'])}</remote-name>\n"
+            f"        <remote-type>{c['remote_type']}</remote-type>\n"
+            f"        <local-name>{c['name']}</local-name>\n"
+            f"        <parent-name>[{table_name_text}]</parent-name>\n"
+            f"        <remote-alias>{xml_escape(c['remote_name'])}</remote-alias>\n"
+            f"        <caption>{xml_escape(c['caption'])}</caption>\n"
+            f"        <local-type>{c['datatype']}</local-type>\n"
+            f"        <aggregation>{c['aggregation']}</aggregation>\n"
+            "        <contains-null>true</contains-null>\n"
+            f"        {collation}\n"
+            f"        <object-id>[{object_id}]</object-id>\n"
+            "      </metadata-record>"
+        )
+
+    col_decls = []
+    for c in vconn["columns"]:
+        col_decls.append(
+            f"  <column caption='{xml_escape(c['caption'], quote_map)}' "
+            f"datatype='{c['datatype']}' name='{c['name']}' "
+            f"role='{c['role']}' type='{c['type']}' />"
+        )
+
+    tds = (
+        "<?xml version='1.0' encoding='utf-8' ?>\n"
+        "\n"
+        f"<datasource formatted-name='federated.{ds_opaque}' inline='true' "
+        f"source-platform='linux' version='18.1' "
+        f"xmlns:user='http://www.tableausoftware.com/xml/user'>\n"
+        "  <document-format-change-manifest>\n"
+        "    <ObjectModelEncapsulateLegacy />\n"
+        "    <ObjectModelTableType />\n"
+        "    <SchemaViewerObjectModel />\n"
+        "  </document-format-change-manifest>\n"
+        "  <connection class='federated'>\n"
+        "    <named-connections>\n"
+        f"      <named-connection caption='{vc_cap_esc}' name='{named_conn_name}'>\n"
+        f"        <connection class='publishedConnection' "
+        f"resourceId='{vconn['vconn_luid']}' resourceName='{vc_cap_esc}' />\n"
+        "      </named-connection>\n"
+        "    </named-connections>\n"
+        f"    <relation connection='{named_conn_name}' name='{table_name_attr}' "
+        f"table='{table_ref}' type='table' />\n"
+        "    <metadata-records>\n"
+        + "\n".join(md_records) + "\n"
+        "    </metadata-records>\n"
+        "  </connection>\n"
+        "  <aliases enabled='yes' />\n"
+        + "\n".join(col_decls) + "\n"
+        f"  <column caption='{table_name_attr}' datatype='table' "
+        f"name='[__tableau_internal_object_id__].[{object_id}]' "
+        f"role='measure' type='quantitative' />\n"
+        "  <layout dim-ordering='alphabetic' measure-ordering='alphabetic' "
+        "show-structure='true' />\n"
+        "  <object-graph>\n"
+        "    <objects>\n"
+        f"      <object caption='{table_name_attr}' id='{object_id}'>\n"
+        "        <properties context=''>\n"
+        f"          <relation connection='{named_conn_name}' name='{table_name_attr}' "
+        f"table='{table_ref}' type='table' />\n"
+        "        </properties>\n"
+        "      </object>\n"
+        "    </objects>\n"
+        "  </object-graph>\n"
+        "</datasource>\n"
+    )
+    return ds_opaque, tds
+
+
+def wrap_tds_as_tdsx(tds_text: str, tds_entry_name: str, out_path: Path) -> None:
+    """Pack a single .tds string into a minimal .tdsx zip at out_path."""
+    with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(tds_entry_name, tds_text.encode("utf-8"))
 
 
 # ---------------------------------------------------------------------------
@@ -512,41 +759,68 @@ def main():
         print(f"[spec] ERROR: {e}", file=sys.stderr)
         sys.exit(1)
 
-    print(
-        f"[spec] source_luid={spec['source_luid']}  kind={spec['source_kind']}  "
-        f"new_name={spec['new_name']}  mode={spec['mode']}"
-    )
+    kind = spec["source_kind"]
+    if kind == "vconn":
+        vc = spec["vconn"]
+        print(
+            f"[spec] kind=vconn  vconn_luid={vc['vconn_luid']}  table={vc['table_name']!r}  "
+            f"columns={len(vc['columns'])}  new_name={spec['new_name']}  mode={spec['mode']}"
+        )
+    else:
+        print(
+            f"[spec] source_luid={spec['source_luid']}  kind={kind}  "
+            f"new_name={spec['new_name']}  mode={spec['mode']}"
+        )
     print(f"[spec] transforms: {len(spec['transforms'])}  calcs: {len(spec['calcs'])}")
 
-    include_extract = spec["source_kind"] == "extract"
-
     with signed_in_server() as server:
-        # 1. Resolve source PDS and download
-        src = server.datasources.get_by_id(spec["source_luid"])
-        print(f"[src] name={src.name}  project={src.project_name}  type={src.datasource_type}")
-
-        if spec["mode"] == "Overwrite" and src.name != spec["new_name"]:
+        # 1. Obtain base .tdsx
+        if kind == "vconn":
+            # Build base .tds from scratch wrapping the vconn - no DL required.
+            ds_opaque, base_tds_text = build_base_tds_from_vconn(spec["vconn"])
+            tds_entry = f"federated.{ds_opaque}.tds"
+            original_tdsx = out_dir / "original.tdsx"
+            wrap_tds_as_tdsx(base_tds_text, tds_entry, original_tdsx)
             print(
-                f"[spec] ERROR: mode=Overwrite requires source.name ({src.name!r}) == "
-                f"new_name ({spec['new_name']!r})",
-                file=sys.stderr,
+                f"[build] original.tdsx ({original_tdsx.stat().st_size} B) "
+                f"synthesized from vconn (no source DL)"
             )
-            sys.exit(1)
+            original_tds_text = base_tds_text
+            (out_dir / "original.tds").write_text(original_tds_text, encoding="utf-8")
+        else:
+            include_extract = kind == "extract"
+            src = server.datasources.get_by_id(spec["source_luid"])
+            print(
+                f"[src] name={src.name}  project={src.project_name}  "
+                f"type={src.datasource_type}"
+            )
 
-        tmp_dl = out_dir / "_dl_orig"
-        tmp_dl.mkdir(exist_ok=True)
-        dl_path = Path(server.datasources.download(
-            src.id, filepath=str(tmp_dl), include_extract=include_extract
-        ))
-        original_tdsx = out_dir / "original.tdsx"
-        shutil.move(str(dl_path), original_tdsx)
-        shutil.rmtree(tmp_dl)
-        print(f"[dl] original.tdsx ({original_tdsx.stat().st_size} B)  include_extract={include_extract}")
+            if spec["mode"] == "Overwrite" and src.name != spec["new_name"]:
+                print(
+                    f"[spec] ERROR: mode=Overwrite requires source.name ({src.name!r}) == "
+                    f"new_name ({spec['new_name']!r})",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
 
-        # 2. Extract .tds, apply transforms, then inject calcs
-        tds_entry, tds_bytes = extract_tds(original_tdsx)
-        original_tds_text = tds_bytes.decode("utf-8")
-        (out_dir / "original.tds").write_text(original_tds_text, encoding="utf-8")
+            tmp_dl = out_dir / "_dl_orig"
+            tmp_dl.mkdir(exist_ok=True)
+            dl_path = Path(server.datasources.download(
+                src.id, filepath=str(tmp_dl), include_extract=include_extract
+            ))
+            original_tdsx = out_dir / "original.tdsx"
+            shutil.move(str(dl_path), original_tdsx)
+            shutil.rmtree(tmp_dl)
+            print(
+                f"[dl] original.tdsx ({original_tdsx.stat().st_size} B)  "
+                f"include_extract={include_extract}"
+            )
+
+            tds_entry, tds_bytes = extract_tds(original_tdsx)
+            original_tds_text = tds_bytes.decode("utf-8")
+            (out_dir / "original.tds").write_text(original_tds_text, encoding="utf-8")
+
+        # 2. Apply transforms, then inject calcs
 
         # Apply transforms first - this rewrites <column> attrs and hides source
         # columns for cast ops, producing synthetic calc specs for the cast ops.
@@ -594,7 +868,17 @@ def main():
         )
 
         # 3. Publish
-        target_project_id = spec["target_project_id"] or src.project_id
+        # For kind=vconn, target.project_id is validated as required above.
+        # For extract/live, fall back to the source PDS's project.
+        target_project_id = spec["target_project_id"] or (
+            src.project_id if kind != "vconn" else None
+        )
+        if not target_project_id:
+            print(
+                "[publish] ERROR: target_project_id could not be resolved",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         ds_item = TSC.DatasourceItem(project_id=target_project_id, name=spec["new_name"])
         publish_mode = (
             TSC.Server.PublishMode.Overwrite

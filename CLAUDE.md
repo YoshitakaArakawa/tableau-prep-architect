@@ -11,25 +11,44 @@
 ユーザーが既存 Prep フローを指して「分析して」「分解設計して」「dbt 風に整理して」「Tableau Cloud に publish して」「実行して」「E2E 比較して」と指示したら、各 Skill を **順次または個別に** 実行する。**Session intake (step 0) で goal / target path を確定したら、その先は extract → analyze → decompose → build → preflight → publish → run → compare まで段階間の承認を取らず一気通貫で進める**。失敗時は AI が原因を機械判定し、回復可能な種別 (例: 280003 → re-build / 409 → Overwrite / 上流 PDS 不在 → 上流 republish) は自律ループでリトライ、回復不能な種別 (認証 / 権限 / 容量 / Cloud 障害 / loop 検知発火) は escalation。compare で gap が出たらメインエージェントが Markdown + JSON を読み、prep-builder / prep-deployer の再呼び出しを判断する。詳細は [autonomous-execution-policy](.claude/skills/prep-deployer/references/autonomous-execution-policy.md) と [autonomous-recovery](.claude/skills/prep-deployer/references/autonomous-recovery.md)。
 
 ```
-[step 0]  Session intake (会話)                    Q1-Q4 を 1 ターンで聞く (§Session intake 参照)
+[step 0]   Session intake (会話)                   Q1-Q4 を 1 ターンで聞く (§Session intake 参照)
                 ↓
 
-[step 0a] prep-extractor ─ get-project-structure   target path を walk、existing prefix / pending segments に分割
-                                                   → deploy-context.md（読み取りのみ）
-                ↓ (deploy-context.md は decompose / preflight / publish で消費)
+prep-extractor ─ Phase A (flow-extract)            .tfl/.tflx → flow-summary.md + flow.json (構造抽出)
+                ↓
 
-[step 0b] prep-deployer ─ preflight                pending segments を idempotent に作成 + target 配下に stg/int/marts
+[step 0a]  prep-extractor ─ Phase B (get-project-structure)
+                                                   target path を walk + --also-scan で Input PDS 親プロジェクトも
+                                                   走査、Datasources in scope に PDS LUID 一覧を出す
+                                                   → deploy-context.md (読み取りのみ)
+                                                   ※ --also-scan に渡す Input PDS 親プロジェクトは flow.json から
+                                                     inspect_input_node() で抽出
+                ↓ (deploy-context.md は Phase C / decompose / preflight / publish で消費)
 
-prep-extractor ─ flow-extract   .tfl/.tflx → flow-summary.md（構造抽出）
-        ↓
+[step 0b]  prep-deployer ─ preflight               pending segments を idempotent に作成 + target 配下に stg/int/marts
+
+prep-extractor ─ Phase C (dispatch-inputs)         flow.json + deploy-context.md →
+                                                   各 Input の取扱 (passthrough / augment / block) と policy 級
+                                                   Transforms 提案を input-dispatch.md (status: pending) で生成
+                ↓
+ユーザー確認 (1 ターン)                            行単位で OK / 変更指示 → main agent が input-dispatch.md を
+                                                   status: confirmed で上書き。block 検出時は session 停止
+                ↓
+
 prep-architect ─ analyze        現状把握 → analysis-<flow>.md
-prep-architect ─ decompose      分解設計 → decomposition-plan-<flow>.md（deploy-context があれば名前衝突も加味、
-                                必須セクション ## Output mapping (original → decomposed) 含む）
+prep-architect ─ decompose      分解設計 → decomposition-plan-<flow>.md
+                                input-dispatch から passthrough Input は stg を作らず int Inputs に直書き、
+                                augment Input は Materialization=live_pds + Transforms 表を生成、
+                                block 検出時は decompose を中断
         ↓
-prep-builder ─ build            .tfl 群を生成（元 .tfl の maestroMetadata / displaySettings を同梱）
+prep-builder ─ build            .tfl 群 + augmenter spec を生成（元 .tfl の maestroMetadata / displaySettings を同梱）
+                                Materialization=live_pds は flows/staging/<name>.augmenter.json、
+                                それ以外は .tfl
                                 → publish_manifest.py init で publish-manifest.json を新規作成
+                                  (kind=tfl / kind=pds_augment を per-entry に記録)
         ↓
 prep-deployer ─ publish + run   レイヤ単位 (stg → int → marts) で publish → run → finishCode=0 確認
+                                kind=tfl は publish_flow.py + run、kind=pds_augment は augment_pds.py (run skip)
                                 同レイヤ内は並列可、レイヤ間は順次
                                 publish/run の各完了で publish_manifest.py update-publish / update-run
                                 全レイヤ完走後に publish_manifest.py resolve-luids で LUID 解決

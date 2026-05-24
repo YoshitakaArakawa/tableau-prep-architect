@@ -92,6 +92,106 @@ def unpack_flow_json(tfl_path: str | Path, out_path: str | Path) -> Path:
     return out
 
 
+def inspect_input_node(flow: dict[str, Any], node_id: str) -> dict[str, Any]:
+    """Classify a Prep flow Input node by its upstream connection type.
+
+    Returns a dict with at minimum `{"kind": <category>}`. Categories:
+      - "pds"        : Tableau Published Data Source (LoadSqlProxy)
+      - "vconn"      : Tableau virtual connection (LoadSql + base
+                       connection.class == 'publishedConnection'). Extra keys:
+                       vconn_luid, vconn_caption, table_uuid, table_name, fields
+      - "direct_db"  : LoadSql against a direct database (Snowflake, Postgres,
+                       etc.) - base connection.class is the db driver
+      - "extract"    : LoadHyper or similar local-extract loader
+      - "unknown"    : nodeType not recognized or node not present / not input
+
+    Used by prep-builder to dispatch stg materialization: vconn -> generate a
+    prep-pds-augmenter spec; pds/direct_db/extract -> currently unsupported for
+    the live-PDS path (build the .tfl as before, or skip with warning per
+    layer-responsibilities.md).
+
+    Detection is decisive (no fuzzy matching): vconn requires both
+    nodeType=='.v1.LoadSql' AND base connection class=='publishedConnection',
+    plus a parseable `relation.table` of the form '[<uuid>].[<name>]'.
+    """
+    node = (flow.get("nodes") or {}).get(node_id)
+    if not node or node.get("baseType") != "input":
+        return {"kind": "unknown", "reason": "node missing or not an input"}
+
+    node_type = node.get("nodeType", "")
+    if node_type.endswith(".LoadSqlProxy"):
+        return {"kind": "pds", "node_type": node_type}
+    if node_type.endswith(".LoadHyper"):
+        return {"kind": "extract", "node_type": node_type}
+    if not node_type.endswith(".LoadSql"):
+        return {"kind": "unknown", "node_type": node_type}
+
+    # LoadSql: could be vconn OR direct DB. Resolve via dataConnections + connections chain.
+    dconn_id = node.get("connectionId")
+    dconn = (flow.get("dataConnections") or {}).get(dconn_id) if dconn_id else None
+    if not dconn:
+        return {"kind": "unknown", "node_type": node_type, "reason": "dataConnection missing"}
+    base_conn_id = dconn.get("baseConnectionId")
+    base_conn = (flow.get("connections") or {}).get(base_conn_id) if base_conn_id else None
+    if not base_conn:
+        return {"kind": "unknown", "node_type": node_type, "reason": "base connection missing"}
+
+    base_class = (base_conn.get("connectionAttributes") or {}).get("class")
+    if base_class != "publishedConnection":
+        return {"kind": "direct_db", "node_type": node_type, "connection_class": base_class}
+
+    # vconn path. Extract identifiers needed to build an augmenter spec.
+    base_attrs = base_conn.get("connectionAttributes") or {}
+    relation = node.get("relation") or {}
+    table_ref = relation.get("table", "")
+    table_uuid = None
+    table_name = None
+    if table_ref.startswith("[") and "].[" in table_ref and table_ref.endswith("]"):
+        inner = table_ref[1:-1]  # strip outer brackets
+        sep = inner.find("].[")
+        if sep > 0:
+            table_uuid = inner[:sep]
+            table_name = inner[sep + 3:]
+
+    return {
+        "kind": "vconn",
+        "node_type": node_type,
+        "vconn_luid": base_attrs.get("resourceId"),
+        "vconn_caption": base_attrs.get("resourceName") or base_conn.get("name"),
+        "table_uuid": table_uuid,
+        "table_name": table_name,
+        "fields": node.get("fields") or [],
+    }
+
+
+def vconn_input_to_augmenter_columns(fields: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Translate an Input node's `fields[]` into prep-pds-augmenter
+    `source.columns[]` entries.
+
+    Input field shape (from flow.json):
+        {"name": "<uuid>", "type": "string", "caption": "<display>", ...}
+    Output shape (matches spec.source.columns[] for kind=vconn):
+        {"name": "[<uuid>]", "remote_name": "<uuid>", "caption": "<display>", "datatype": "<dt>"}
+
+    `isGenerated=True` fields (e.g. Tableau-injected `Table Names` in Union
+    outputs) are skipped since they do not exist in the underlying vconn table.
+    """
+    cols = []
+    for f in fields:
+        if f.get("isGenerated"):
+            continue
+        raw_name = f.get("name")
+        if not raw_name:
+            continue
+        cols.append({
+            "name": f"[{raw_name}]",
+            "remote_name": raw_name,
+            "caption": f.get("caption") or raw_name,
+            "datatype": f.get("type") or "string",
+        })
+    return cols
+
+
 def _ensure_collections(flow: dict[str, Any]) -> None:
     """Ensure the 4 top-level collections that LoadSqlProxy depends on exist."""
     flow.setdefault("connections", {})
