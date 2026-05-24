@@ -56,7 +56,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from flow_io import load_aux_entries, load_flow_json, pack_flow_json, patch_pds_dbname  # noqa: E402
-from tableau_auth import sign_in_server  # noqa: E402
+from tableau_auth import signed_in_server  # noqa: E402
 
 import discover_pds_dbname  # noqa: E402
 
@@ -228,8 +228,7 @@ def main() -> int:
         f"\n[auto_patch] resolving {len(needed)} unique dbname(s) from Cloud..."
     )
 
-    server, auth = sign_in_server()
-    with server.auth.sign_in(auth):
+    with signed_in_server() as server:
         projects_cache = discover_pds_dbname.fetch_all_projects(server)
         dbnames: dict[str, str] = {}
         for ds in sorted(needed):

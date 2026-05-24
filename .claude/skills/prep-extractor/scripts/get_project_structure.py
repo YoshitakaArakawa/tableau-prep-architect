@@ -42,7 +42,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "scripts"))
 
 import tableauserverclient as TSC  # noqa: E402
 
-from tableau_auth import sign_in_server  # noqa: E402
+from tableau_auth import signed_in_server  # noqa: E402
 
 
 DBT_LAYERS = ("stg", "intermediate", "marts")
@@ -371,8 +371,7 @@ def main():
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    server, auth = sign_in_server()
-    with server.auth.sign_in(auth):
+    with signed_in_server() as server:
         all_projects = fetch_all_projects(server)
         print(f"[info] fetched {len(all_projects)} projects from server", file=sys.stderr)
 

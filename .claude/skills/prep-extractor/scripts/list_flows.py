@@ -19,7 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "scripts"))
 
-from tableau_auth import sign_in_server  # noqa: E402
+from tableau_auth import signed_in_server  # noqa: E402
 
 
 def parse_args():
@@ -34,8 +34,7 @@ def parse_args():
 
 def main():
     args = parse_args()
-    server, auth = sign_in_server()
-    with server.auth.sign_in(auth):
+    with signed_in_server() as server:
         all_flows, _ = server.flows.get()
 
         flows = list(all_flows)

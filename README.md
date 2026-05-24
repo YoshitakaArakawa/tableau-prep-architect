@@ -65,7 +65,9 @@ dbt のベストプラクティスを Prep に転用しますが、Tableau Workb
 
 ## 認証
 
-REST API への認証は、Personal Access Token (PAT) を `.env` ファイル経由で渡す形を採用しています。テンプレートは [.env.template](.env.template) を参照してください。実 `.env` は `.gitignore` で除外しています。
+REST API への認証は、OAuth 2.0 (Authorization Code + PKCE) によるブラウザサインインを採用しています。`.env` ファイルには `SERVER` と `SITE_NAME` のみを置き、secret は持ちません。初回および token 失効後はブラウザで Tableau Cloud のサインイン画面が自動で開きます。テンプレートは [.env.template](.env.template) を参照してください。実 `.env` は `.gitignore` で除外しています。
+
+CI/CD などの非対話実行が必要な場合は、本リポのスコープ外として別途 PAT ベースの簡易スクリプトを切り出す前提です。
 
 ## 使い方
 

@@ -108,13 +108,12 @@ VizQL Data Service で Published DS にアサーション (not_null / unique / r
 
 ## 認証
 
-`.env` ファイルから PAT を読み込む。Repo 直下 [scripts/tableau_auth.py](../../../scripts/tableau_auth.py) を共通モジュールとして import。
+`.env` から `SERVER` / `SITE_NAME` を読み、OAuth 2.0 (Authorization Code + PKCE) のブラウザサインインで access_token を取得する。Repo 直下 [scripts/tableau_auth.py](../../../scripts/tableau_auth.py) を共通モジュール (`signed_in_server()` context manager) として import。
 
 ```
 SERVER=https://<your-pod>.online.tableau.com
 SITE_NAME=mysite
-PAT_NAME=...
-PAT_VALUE=...
+OAUTH_CALLBACK_PORT=8765   # optional, default 8765
 ```
 
 詳細: [references/authentication.md](references/authentication.md)

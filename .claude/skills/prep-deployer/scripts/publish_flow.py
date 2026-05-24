@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "scripts"))
 
 import tableauserverclient as TSC  # noqa: E402
 
-from tableau_auth import sign_in_server  # noqa: E402
+from tableau_auth import signed_in_server  # noqa: E402
 
 
 def parse_args():
@@ -66,8 +66,7 @@ def main():
     if not file_path.exists():
         sys.exit(f"ERROR: File not found: {file_path}")
 
-    server, auth = sign_in_server()
-    with server.auth.sign_in(auth):
+    with signed_in_server() as server:
         project_id = resolve_project_id(server,
                                         project_id=args.project_id,
                                         project_path=args.project_path)

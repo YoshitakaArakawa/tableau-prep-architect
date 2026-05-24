@@ -15,7 +15,7 @@ publish に進む前に確認すべき項目：
 1. **.tfl ファイルの存在** — 入力パスにファイルが実在するか
 2. **命名規約適合** — ファイル名が `stg_` / `int_` / `fct_` / `dim_` / `rpt_` のいずれかで始まるか（[../../../../references/naming-conventions.md](../../../../references/naming-conventions.md)）
 3. **親プロジェクトの存在** — `create_projects.py` で stg/int/marts サブプロジェクトが作成済みか
-4. **PAT の有効性** — `.env` の `PAT_VALUE` が失効していないか（Tableau Cloud は 15 日アクティビティなしで失効）
+4. **OAuth サインインの成立** — ブラウザサインインが 5 分以内に完了するか（callback listener / ブラウザ起動可能な環境か）
 5. **embed credentials の決定** — フローが生 DB 接続を持つか、仮想接続経由か
 
 ## 推奨 publish/run 順序 (レイヤ間は必ず順次)
@@ -175,7 +175,7 @@ python scripts/run_layer.py --manifest $MANIFEST --layer marts
 |---|---|---|---|
 | `280003` ("Problem reading the provided Flow file") | publish HTTP 400 | (a) 生成 .tfl に `maestroMetadata` 等の aux entry が無い / (b) Input ノードに connection 登録なし (孤立 connectionId) / (c) **複数の重複 Tableau Server connection entry** (KB 005232681) / (d) LoadSqlProxy / dataConnection の `dbname` 欠落 / (e) LoadSqlProxy ノードに必須デフォルトフィールド (`relation`, `actions`, `debugModeRowLimit` 等) の欠落 | (a) `aux_entries=` 渡し忘れを確認 / (b) `flow_io.add_pds_input` で一括登録 / (c) `add_pds_input` は dedup するので自前生成を疑う / (d) `add_pds_input` は dbname=None 渡しても placeholder を自動挿入する / (e) `make_load_sql_proxy_node` のデフォルトに含まれている — 自前構築している場合は要追加 |
 | 4xx `Input data source not found` 系 | publish/run | 上流レイヤの PDS が Cloud 上に存在しない | 上流レイヤの publish + run を先に完走させる ([レイヤ順次の節](#推奨-publishrun-順序-レイヤ間は必ず順次)) |
-| 401 / 403 | publish | PAT 失効 / 権限不足 | [authentication.md](authentication.md) |
+| 401 / 403 | publish | access token 失効 / サインインユーザーの権限不足 | [authentication.md](authentication.md) |
 | 404 (project) | publish | preflight 未実施 / project 削除済 | prep-extractor Phase B → preflight 再実行 |
 | 409 (name conflict) | publish | 同名 flow が CreateNew で既存 | `--mode Overwrite` 確認、または名前変更 |
 

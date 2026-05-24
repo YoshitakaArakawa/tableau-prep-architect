@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "scripts"))
 
 import tableauserverclient as TSC  # noqa: E402
 
-from tableau_auth import sign_in_server  # noqa: E402
+from tableau_auth import signed_in_server  # noqa: E402
 
 
 def parse_args():
@@ -77,8 +77,7 @@ def resolve_parent_by_path(projects, path: str):
 def main():
     args = parse_args()
 
-    server, auth = sign_in_server()
-    with server.auth.sign_in(auth):
+    with signed_in_server() as server:
         all_projects, _ = server.projects.get(
             TSC.RequestOptions(pagesize=1000))
         all_projects = list(all_projects)

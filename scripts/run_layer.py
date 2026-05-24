@@ -42,7 +42,7 @@ PUBLISH_MANIFEST_PY = REPO_ROOT / "scripts" / "publish_manifest.py"
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-from tableau_auth import sign_in_server  # noqa: E402
+from tableau_auth import signed_in_server  # noqa: E402
 
 
 FINISH_CODES = {0: "Success", 1: "Failed", 2: "Cancelled"}
@@ -148,9 +148,8 @@ def main() -> int:
         f"(interval={args.poll_interval}s, timeout={args.timeout}s)..."
     )
     results: dict[str, dict] = {}
-    server, auth = sign_in_server()
     start = time.time()
-    with server.auth.sign_in(auth):
+    with signed_in_server() as server:
         remaining = list(jobs)
         while remaining and (time.time() - start) < args.timeout:
             still: list[dict] = []

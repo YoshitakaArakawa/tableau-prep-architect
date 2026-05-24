@@ -86,7 +86,7 @@ Tableau Server/Cloud 上の **publish 先プロジェクト階層** を REST API
 
 - decompose（分解設計）時点で **既存 flow 名との衝突** を避けたい
 - prep-deployer の preflight が「サブプロジェクト不足 → 作成承認を取る」判断材料を必要とする
-- publish 時に「PAT がそもそも書き込み権限を持たない site / project だった」という遅発の事故を防ぐ
+- publish 時に「サインインしたユーザーがそもそも書き込み権限を持たない site / project だった」という遅発の事故を防ぐ
 - **URL ID (`/projects/1117306` の数値) からの LUID 解決は REST 標準では不可能** なので、`Parent/Child` path での解決ロジックをここに集約
 
 ## 入力
@@ -95,7 +95,7 @@ Tableau Server/Cloud 上の **publish 先プロジェクト階層** を REST API
 |---|---|
 | target path（深さ自由、例: `"99_Sandbox/Q4-2026/flow241407_decompose"`） | top-level から `parent_id` チェーンを walk。途中で見つからないセグメントは pending |
 | または target LUID | `server.projects.get_by_id` で直接取得、parent chain を逆走して existing prefix を再構成 |
-| `.env`（Repo 直下 or ユーザー作業フォルダ） | `SERVER`, `SITE_NAME`, `PAT_NAME`, `PAT_VALUE` |
+| `.env`（Repo 直下 or ユーザー作業フォルダ） | `SERVER`, `SITE_NAME` (OAuth ブラウザサインインで認証、secret は持たない) |
 
 加えて出力先 `deploy-context.md` のパス。
 

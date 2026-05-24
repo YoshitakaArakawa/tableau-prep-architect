@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "scripts"))
 
 import tableauserverclient as TSC  # noqa: E402
 
-from tableau_auth import sign_in_server  # noqa: E402
+from tableau_auth import signed_in_server  # noqa: E402
 
 
 # Tableau job finishCode meanings
@@ -75,8 +75,7 @@ def emit_result(payload: dict) -> None:
 
 def main():
     args = parse_args()
-    server, auth = sign_in_server()
-    with server.auth.sign_in(auth):
+    with signed_in_server() as server:
         flow = find_flow(server,
                          flow_id=args.flow_id,
                          flow_name=args.flow_name,

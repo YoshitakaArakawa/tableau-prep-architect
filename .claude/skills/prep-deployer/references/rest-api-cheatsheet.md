@@ -11,30 +11,24 @@ note: prep-deployer が使う主要エンドポイント（Auth / Projects / Flo
 
 ## 認証
 
-### Sign In（PAT）
+### Sign In（OAuth 2.0 Authorization Code + PKCE）
 
-```http
-POST /api/3.x/auth/signin
-Content-Type: application/json
+本リポは PAT を使わず、ブラウザサインインの OAuth で `access_token` を取得する。フローの詳細は [authentication.md](authentication.md) 参照。要旨:
 
-{
-  "credentials": {
-    "personalAccessTokenName":   "my-pat",
-    "personalAccessTokenSecret": "<secret>",
-    "site": { "contentUrl": "mysite" }
-  }
-}
-```
+1. `POST /oauth2/v1/auth?...` をブラウザで開く（PKCE challenge を query に含む）
+2. ローカル callback (`http://127.0.0.1:{port}/Callback`) で `code` を受信
+3. `POST /oauth2/v1/token` で `code + code_verifier` を交換 → `access_token` (3-part: `<id1>|<id2>|<site-luid>`)
+4. `GET /api/{version}/sessions/current` で user_id を取得
+5. 以降のリクエストは `X-Tableau-Auth: {access_token}` ヘッダーで叩く
 
-レスポンスから `token` と `site.id` を取得 → 以降のリクエストの `X-Tableau-Auth` ヘッダーに付与。
-
-### TSC 等価
+### 共通ヘルパ経由
 
 ```python
-auth = TSC.PersonalAccessTokenAuth("my-pat", "<secret>", site_id="mysite")
-server = TSC.Server("https://<your-pod>.online.tableau.com", use_server_version=True)
-with server.auth.sign_in(auth):
-    ...
+from tableau_auth import signed_in_server
+
+with signed_in_server() as server:
+    # TSC.Server は access_token が inject 済み
+    flows, _ = server.flows.get()
 ```
 
 ## Projects
@@ -85,8 +79,8 @@ with server.auth.sign_in(auth):
 | Code | 原因例 | 対処 |
 |---|---|---|
 | 400 | リクエスト JSON 不正、必須フィールド欠落 | スキーマを公式リファレンスで確認 |
-| 401 | 認証失敗（PAT 失効・サイト不一致） | [authentication.md](authentication.md) のトラブルシューティング |
-| 403 | 権限不足（サイトロール・プロジェクト権限） | サービスアカウントの権限を見直し |
+| 401 | 認証失敗（access token 失効・サイト不一致） | [authentication.md](authentication.md) のトラブルシューティング |
+| 403 | 権限不足（サイトロール・プロジェクト権限） | サインインしたユーザーの権限を見直し |
 | 404 | リソース不在 / ID 不正 | LUID と path のスペルを確認 |
 | 409 | 既存と衝突（CreateNew で同名 publish 等） | `Overwrite` モードに切り替え |
 | 429 | レート制限 | 指数バックオフでリトライ |

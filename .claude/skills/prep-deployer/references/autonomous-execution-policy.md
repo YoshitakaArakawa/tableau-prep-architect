@@ -67,8 +67,8 @@ note: publish / run / test の副作用、承認を取らない判断根拠、--
 
 | 状況 | 検出方法 | 対処 |
 |---|---|---|
-| サービスアカウントのライセンスが Creator でない | publish が 403 | escalation (人間 → 管理者) |
-| PAT 失効 | 401 | escalation (人間 → PAT 再発行) |
+| サインインしたユーザーのライセンスが Creator でない | publish が 403 | escalation (人間 → 管理者) |
+| access token 失効 (>1〜2h) | 401 | escalation (人間 → プロセス再起動で再 OAuth サインイン) |
 | 仮想接続の DB 認証情報失効 | run finishCode=1 + notes に "authentication" | escalation (人間 → 接続情報更新) |
 | サイト容量上限 | publish or run が 5xx | escalation |
 | メンテナンスウィンドウ中 | sign-in 失敗 | escalation (待つしかない) |
@@ -77,25 +77,7 @@ note: publish / run / test の副作用、承認を取らない判断根拠、--
 
 ## CI での運用
 
-非対話実行 (GitHub Actions 等) でもポリシーは同じ。AI Agent ではなく CI が実行主体になるだけで、承認は **環境 (production) に Required reviewer を設定** する形で session intake と等価の合意ゲートを置く:
-
-```yaml
-jobs:
-  publish:
-    runs-on: ubuntu-latest
-    environment: production  # ← Required reviewer 設定で人間承認
-    steps:
-      - uses: actions/checkout@v4
-      - run: pip install -r requirements.txt
-      - run: python publish_flow.py --file ... --project-path ...
-        env:
-          SERVER:    ${{ secrets.TABLEAU_SERVER }}
-          SITE_NAME: ${{ secrets.TABLEAU_SITE }}
-          PAT_NAME:  ${{ secrets.TABLEAU_PAT_NAME }}
-          PAT_VALUE: ${{ secrets.TABLEAU_PAT_VALUE }}
-```
-
-`--yes` 引数自体は撤廃したのでフラグ不要。スクリプトは常に非対話で動く。
+本リポの `signed_in_server()` は OAuth ブラウザサインイン前提なので **CI では使えない**。CI/CD で非対話 publish が必要になった場合は、本リポのスコープ外として **別途 PAT ベースの簡易 REST スクリプト** を切り出す前提とする (例: `secrets.TABLEAU_PAT_NAME` / `TABLEAU_PAT_VALUE` を `X-Tableau-Auth` で直接 sign-in する小さな publish スクリプト)。承認は環境 (production) に Required reviewer を設定する形で session intake と等価の合意ゲートを置く。
 
 ## 旧ポリシーからの変更点 (2026-05-17)
 

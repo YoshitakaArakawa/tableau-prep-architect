@@ -375,13 +375,12 @@ def cmd_update_run(args: argparse.Namespace) -> int:
 
 
 def cmd_resolve_luids(args: argparse.Namespace) -> int:
-    from tableau_auth import sign_in_server  # noqa: E402
+    from tableau_auth import signed_in_server  # noqa: E402
 
     path = Path(args.manifest)
     m = load_manifest(path)
 
-    server, auth = sign_in_server()
-    with server.auth.sign_in(auth):
+    with signed_in_server() as server:
         # 1. Original flow LUID (if not already set)
         if not m["original"]["flow_luid"]:
             luid = _find_flow_luid_by_name(server, m["original"]["flow_name"])

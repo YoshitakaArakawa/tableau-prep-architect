@@ -38,7 +38,7 @@ publish 先構造は **「最下層は規約固定、それより上は柔軟」
 |---|---|
 | target path（深さ自由、例: `"99_Sandbox/Q4-2026/flow241407_decompose"`） | top-level から `parent_id` チェーンを walk。途中で見つからないセグメントは pending |
 | または target LUID | `server.projects.get_by_id` で直接取得、parent chain を逆走して existing prefix を再構成 |
-| `.env`（Repo 直下 or ユーザー作業フォルダ） | `SERVER`, `SITE_NAME`, `PAT_NAME`, `PAT_VALUE` |
+| `.env`（Repo 直下 or ユーザー作業フォルダ） | `SERVER`, `SITE_NAME` (OAuth ブラウザサインインで認証、secret は持たない) |
 
 加えて出力先 `deploy-context.md` のパス。
 
@@ -104,5 +104,5 @@ python .claude/skills/prep-extractor/scripts/get_project_structure.py \
 ## 制約 (Phase B)
 
 - 読み取り専用 — サブプロジェクト作成や権限変更は **prep-deployer の preflight** に委譲
-- `writeable` フィールドは TSC が PAT によっては populate しないため `unknown` で報告するケースあり（実体は publish 試行で確認）
+- `writeable` フィールドは TSC が認証ユーザーによっては populate しないため `unknown` で報告するケースあり（実体は publish 試行で確認）
 - 同名 top-level プロジェクトが複数ある site では `--project-id` で曖昧性解消が必要

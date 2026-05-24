@@ -36,7 +36,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 import tableauserverclient as TSC  # noqa: E402
 
-from tableau_auth import sign_in_server  # noqa: E402
+from tableau_auth import signed_in_server  # noqa: E402
 
 # Tableau .tds <column> attribute allowlists.
 # datatype: other values exist (e.g. spatial) but are out of initial scope.
@@ -234,8 +234,7 @@ def main():
     print(f"[spec] source_luid={spec['source_luid']}  new_name={spec['new_name']}  mode={spec['mode']}")
     print(f"[spec] calcs: {len(spec['calcs'])}")
 
-    server, auth = sign_in_server()
-    with server.auth.sign_in(auth):
+    with signed_in_server() as server:
         # 1. Resolve source PDS and download
         src = server.datasources.get_by_id(spec["source_luid"])
         print(f"[src] name={src.name}  project={src.project_name}  type={src.datasource_type}")

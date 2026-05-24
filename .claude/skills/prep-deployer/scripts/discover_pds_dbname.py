@@ -45,7 +45,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "scripts"))
 import tableauserverclient as TSC  # noqa: E402
 
 from flow_io import load_aux_entries, load_flow_json, pack_flow_json, patch_pds_dbname  # noqa: E402
-from tableau_auth import sign_in_server  # noqa: E402
+from tableau_auth import signed_in_server  # noqa: E402
 
 
 METADATA_QUERY = """
@@ -153,8 +153,7 @@ def main():
                         "(default: content_url)")
     args = p.parse_args()
 
-    server, auth = sign_in_server()
-    with server.auth.sign_in(auth):
+    with signed_in_server() as server:
         result = discover(server, datasource_name=args.datasource_name,
                           project_path=args.project_path)
         print(json.dumps(result, indent=2, ensure_ascii=False))

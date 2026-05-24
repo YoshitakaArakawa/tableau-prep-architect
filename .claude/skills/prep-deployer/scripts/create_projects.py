@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "scripts"))
 
 import tableauserverclient as TSC  # noqa: E402
 
-from tableau_auth import sign_in_server  # noqa: E402
+from tableau_auth import signed_in_server  # noqa: E402
 
 
 DEFAULT_LAYERS = [
@@ -65,8 +65,7 @@ def main():
     if not targets:
         sys.exit("ERROR: No valid layers requested.")
 
-    server, auth = sign_in_server()
-    with server.auth.sign_in(auth):
+    with signed_in_server() as server:
         parent = find_top_level_project(server,
                                         project_id=args.parent_id,
                                         project_name=args.parent_name)

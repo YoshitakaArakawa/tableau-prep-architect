@@ -21,7 +21,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "scripts"))
 
-from tableau_auth import sign_in_server  # noqa: E402
+from tableau_auth import signed_in_server  # noqa: E402
 
 
 FINISH_CODES = {0: "Success", 1: "Failed", 2: "Cancelled"}
@@ -35,8 +35,7 @@ def parse_args():
 
 def main():
     args = parse_args()
-    server, auth = sign_in_server()
-    with server.auth.sign_in(auth):
+    with signed_in_server() as server:
         job = server.jobs.get_by_id(args.job_id)
         print(f"Job id:        {job.id}")
         print(f"Job type:      {job.type}")

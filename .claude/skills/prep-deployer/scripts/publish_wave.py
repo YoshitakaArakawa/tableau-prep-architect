@@ -49,7 +49,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "scripts"))
 
 import tableauserverclient as TSC  # noqa: E402
 
-from tableau_auth import sign_in_server  # noqa: E402
+from tableau_auth import signed_in_server  # noqa: E402
 
 
 MAX_WORKERS_HARD_CAP = 8
@@ -117,9 +117,8 @@ def main() -> int:
     workers = args.max_workers or min(len(files), MAX_WORKERS_HARD_CAP)
     workers = max(1, min(workers, MAX_WORKERS_HARD_CAP))
 
-    server, auth = sign_in_server()
     failures: list[tuple[str, str]] = []
-    with server.auth.sign_in(auth):
+    with signed_in_server() as server:
         project_id = resolve_project_id(
             server, project_id=args.project_id, project_path=args.project_path
         )
