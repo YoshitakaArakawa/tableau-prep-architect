@@ -50,8 +50,6 @@ CLIENT_ID は UUID を都度生成（OAuth endpoint が要求するため）。C
 | 破棄 | `python scripts/tableau_auth.py logout`（server 側 sign_out + ファイル削除） |
 | 状態確認 | `python scripts/tableau_auth.py status`（cache の有無 / 生存性を表示） |
 
-**バックアップ / 同期サービスへの注意**: bearer token が含まれるので、`.auth-cache/` をクラウドストレージ（OneDrive / iCloud / Dropbox など）の同期対象に入れないこと。リポを同期フォルダ配下に置く場合は、サービス側で `.auth-cache/` を同期除外する。
-
 ## `.env` の配置
 
 | 場所 | 用途 |
