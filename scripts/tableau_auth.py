@@ -165,6 +165,75 @@ def _http_get_json(url: str, headers: dict[str, str], timeout: int = 30) -> dict
         raise SystemExit(f"[auth] ERROR: GET {url} -> HTTP {e.code}\nbody: {body_text}")
 
 
+def _probe_session(server_url: str, api_version: str, access_token: str) -> dict | None:
+    """Best-effort liveness check. Returns sessions/current JSON on 200, None otherwise."""
+    req = urllib.request.Request(
+        url=f"{server_url}/api/{api_version}/sessions/current",
+        method="GET",
+        headers={
+            "Accept": "application/json",
+            "X-Tableau-Auth": access_token,
+            "User-Agent": USER_AGENT,
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read().decode())
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError):
+        return None
+
+
+# ----- Session cache (repo-internal, gitignored) -----
+def _cache_path() -> Path:
+    return Path(__file__).resolve().parent.parent / ".auth-cache" / "session.json"
+
+
+def _load_cached_session(server_url: str, site_name: str, api_version: str) -> dict | None:
+    """Return {access_token, user_id} if cache matches (server, site) and token is still alive."""
+    path = _cache_path()
+    if not path.exists():
+        return None
+    try:
+        cache = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"[auth] cache unreadable, ignoring: {e}", file=sys.stderr)
+        return None
+    if cache.get("server_url") != server_url or cache.get("site_name") != site_name:
+        return None
+    access_token = cache.get("access_token")
+    if not access_token:
+        return None
+    session = _probe_session(server_url, api_version, access_token)
+    if session is None:
+        print("[auth] cached token rejected by server, will re-auth", file=sys.stderr)
+        try:
+            path.unlink()
+        except OSError:
+            pass
+        return None
+    user_id = session["session"]["user"]["id"]
+    print(f"[auth] reused cached session (user_id={user_id})", file=sys.stderr)
+    return {"access_token": access_token, "user_id": user_id}
+
+
+def _save_session(server_url: str, site_name: str, access_token: str) -> None:
+    path = _cache_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".json.tmp")
+    payload = {
+        "server_url": server_url,
+        "site_name": site_name,
+        "access_token": access_token,
+    }
+    tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    try:
+        os.chmod(tmp, 0o600)
+    except OSError:
+        pass
+    os.replace(tmp, path)
+    print(f"[auth] cached session at {path}", file=sys.stderr)
+
+
 # ----- OAuth authorization_code (PKCE) flow -----
 def _run_oauth_flow(server_url: str, site_name: str, port: int) -> str:
     """Drive PKCE browser sign-in. Returns access_token (3-part `id1|id2|site-luid`)."""
@@ -242,9 +311,12 @@ def _fetch_user_id(server_url: str, api_version: str, access_token: str) -> str:
 
 @contextlib.contextmanager
 def signed_in_server():
-    """Run OAuth (PKCE) sign-in and yield a TSC.Server bound to the access token.
+    """Yield a TSC.Server bound to a Tableau Cloud access_token.
 
-    Calls server.auth.sign_out() on exit (best-effort)."""
+    Reuses a cached token from <repo>/.auth-cache/session.json when one is alive;
+    otherwise runs OAuth (PKCE) browser sign-in and caches the result. Does NOT
+    sign out on exit — call `python scripts/tableau_auth.py logout` to invalidate.
+    """
     creds = load_credentials()
     server_url = creds["server_url"]
     site_name = creds["site_name"]
@@ -255,9 +327,16 @@ def signed_in_server():
     server = TSC.Server(server_url, use_server_version=True)
     api_version = server.version
 
-    access_token = _run_oauth_flow(server_url, site_name, port)
-    site_luid = _derive_site_luid(access_token)
-    user_id = _fetch_user_id(server_url, api_version, access_token)
+    cached = _load_cached_session(server_url, site_name, api_version)
+    if cached:
+        access_token = cached["access_token"]
+        user_id = cached["user_id"]
+        site_luid = _derive_site_luid(access_token)
+    else:
+        access_token = _run_oauth_flow(server_url, site_name, port)
+        site_luid = _derive_site_luid(access_token)
+        user_id = _fetch_user_id(server_url, api_version, access_token)
+        _save_session(server_url, site_name, access_token)
 
     server._set_auth(site_luid, user_id, access_token, site_url=site_name)
     print(
@@ -265,10 +344,81 @@ def signed_in_server():
         file=sys.stderr,
     )
 
+    yield server
+
+
+# ----- CLI: logout / status -----
+def _cli_logout() -> int:
+    path = _cache_path()
+    if not path.exists():
+        print("[auth] no cached session to remove")
+        return 0
     try:
-        yield server
-    finally:
-        try:
-            server.auth.sign_out()
-        except Exception as e:
-            print(f"[auth] WARNING: sign_out failed: {e}", file=sys.stderr)
+        cache = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        cache = None
+    if cache:
+        server_url = cache.get("server_url")
+        access_token = cache.get("access_token")
+        if server_url and access_token:
+            try:
+                tmp_server = TSC.Server(server_url, use_server_version=True)
+                api_version = tmp_server.version
+                req = urllib.request.Request(
+                    url=f"{server_url}/api/{api_version}/auth/signout",
+                    method="POST",
+                    headers={
+                        "X-Tableau-Auth": access_token,
+                        "User-Agent": USER_AGENT,
+                    },
+                )
+                with urllib.request.urlopen(req, timeout=10):
+                    pass
+                print("[auth] server-side sign_out OK")
+            except Exception as e:
+                print(f"[auth] server-side sign_out best-effort failed: {e}")
+    path.unlink()
+    print(f"[auth] deleted cache: {path}")
+    return 0
+
+
+def _cli_status() -> int:
+    path = _cache_path()
+    print(f"cache path: {path}")
+    if not path.exists():
+        print("status: no cached session")
+        return 0
+    try:
+        cache = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"status: unreadable ({e})")
+        return 1
+    server_url = cache.get("server_url")
+    site_name = cache.get("site_name")
+    access_token = cache.get("access_token")
+    print(f"server_url: {server_url}")
+    print(f"site_name: {site_name!r}")
+    if not (server_url and access_token):
+        print("status: malformed cache")
+        return 1
+    tmp_server = TSC.Server(server_url, use_server_version=True)
+    session = _probe_session(server_url, tmp_server.version, access_token)
+    if session is None:
+        print("status: expired or invalid (next signed_in_server() will re-auth)")
+        return 1
+    user_id = session["session"]["user"]["id"]
+    print(f"status: alive (user_id={user_id})")
+    return 0
+
+
+def _main(argv: list[str]) -> int:
+    if len(argv) < 2 or argv[1] not in ("logout", "status"):
+        print("usage: python scripts/tableau_auth.py {logout|status}", file=sys.stderr)
+        return 2
+    if argv[1] == "logout":
+        return _cli_logout()
+    return _cli_status()
+
+
+if __name__ == "__main__":
+    sys.exit(_main(sys.argv))
