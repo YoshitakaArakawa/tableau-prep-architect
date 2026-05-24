@@ -1,12 +1,12 @@
 ---
 purpose: prep-deployer の「実行系操作は AI Agent が承認なしで自律実行し、失敗は自律ループで回復する」ポリシー定義
 fetched_at: 2026-05-17
-note: publish / run / test の副作用、承認を取らない判断根拠、--yes フラグの扱い、自律リトライと escalation の境界を規定
+note: publish / run の副作用、承認を取らない判断根拠、--yes フラグの扱い、自律リトライと escalation の境界を規定
 ---
 
 # autonomous-execution-policy
 
-`prep-deployer` の **「publish / run / test は AI Agent が承認なしで自律実行し、失敗時は自律診断ループで回復、回復不能な種類だけ人間に escalation する」** ポリシーを規定する。
+`prep-deployer` の **「publish / run は AI Agent が承認なしで自律実行し、失敗時は自律診断ループで回復、回復不能な種類だけ人間に escalation する」** ポリシーを規定する。
 
 ## なぜ承認を撤廃するか
 
@@ -39,7 +39,7 @@ note: publish / run / test の副作用、承認を取らない判断根拠、--
 
 ## 3 つの不変条件
 
-1. **AI Agent は publish / run / test を承認プロンプトなしで実行する**
+1. **AI Agent は publish / run を承認プロンプトなしで実行する**
    - `--yes` は AI Agent がデフォルトで付与する (旧ポリシーから反転)
    - スクリプト側の対話プロンプトは撤廃済み (`publish_flow.py` / `run_flow.py` / `create_project.py`)
 
@@ -57,7 +57,7 @@ note: publish / run / test の副作用、承認を取らない判断根拠、--
 
 | 場面 | 承認方法 |
 |---|---|
-| Session intake (step 0) で goal / target path を確定 | 会話で明示合意 (これが publish / run / test 全体の承認になる) |
+| Session intake (step 0) で goal / target path を確定 | 会話で明示合意 (これが publish / run 全体の承認になる) |
 | top-level プロジェクト作成 (preflight で `existing_prefix` が null) | WARNING を stderr に出すが処理は止めない (governance はユーザーが事後監査) |
 | CI / cron での無人実行 | session intake 相当の合意を別途持つ (PR レビュー / ChatOps 等) |
 

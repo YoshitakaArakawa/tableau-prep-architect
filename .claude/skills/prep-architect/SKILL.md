@@ -116,7 +116,7 @@ decompose 完了後、prep-builder に渡すのは:
 1. `decomposition-plan-<flow-name>.md`（設計の真の source）
 2. 元 .tfl / .tflx（build 時の元ノード定義の参照元）
 
-prep-builder はこの 2 つから新 .tfl 群を生成し、続いて prep-deployer が publish / run / test を行う。
+prep-builder はこの 2 つから新 .tfl 群を生成し、続いて prep-deployer が publish / run を行う。
 
 ## 設計原則
 

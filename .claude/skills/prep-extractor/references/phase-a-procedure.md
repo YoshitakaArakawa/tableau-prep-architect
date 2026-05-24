@@ -18,8 +18,7 @@ unpack_flow_json('<input.tfl>', 'work/<date>/flow.json')
 
 以下を Read して flow JSON の構造を把握する:
 
-- [../../../../references/tfl-json-schema.md](../../../../references/tfl-json-schema.md) — ファイル形式、トップレベル JSON 構造、`previousNodes` の罠、`beforeActionAnnotations` ラップ構造、`initialNodes` BFS 規約
-- [../../../../references/prep-ui-to-json-mapping.md](../../../../references/prep-ui-to-json-mapping.md) — UI ステップ ⇔ nodeType ⇔ actions サブタイプの対応表
+- [../../../../references/tfl-json-schema.md](../../../../references/tfl-json-schema.md) — ファイル形式、トップレベル JSON 構造、UI ステップ ⇔ nodeType ⇔ actions サブタイプの対応表、`previousNodes` の罠、`beforeActionAnnotations` ラップ構造、`initialNodes` BFS 規約
 - [flow-summary-format.md](flow-summary-format.md) — 出力書式の厳密仕様
 
 ## Step 3: トポロジ復元
@@ -110,7 +109,7 @@ python .claude/skills/prep-extractor/scripts/download_flow.py \
 
 ## 制約 (Phase A)
 
-- **Tableau Prep のバージョンに依存**。新バージョンで構造が変わったら Repo 直下 [tfl-json-schema.md](../../../../references/tfl-json-schema.md) と [prep-ui-to-json-mapping.md](../../../../references/prep-ui-to-json-mapping.md) を更新する
+- **Tableau Prep のバージョンに依存**。新バージョンで構造が変わったら Repo 直下 [tfl-json-schema.md](../../../../references/tfl-json-schema.md) を更新する
 - **業務的解釈・レイヤ推定はしない**（それは prep-architect analyze の役割）
 - **分解設計もしない**（同 decompose の役割）
 - 本 Skill は純粋に「構造の機械的抽出 + Mermaid 可視化」に専念する

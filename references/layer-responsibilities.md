@@ -102,7 +102,7 @@ Clean ステップ 1 つが：
 
 ### actions レベル判定の早見
 
-詳細は [prep-ui-to-json-mapping.md](prep-ui-to-json-mapping.md) の actions サブタイプ表を参照。要約:
+詳細は [tfl-json-schema.md §SuperTransform 内部の actions](tfl-json-schema.md#supertransform-内部の-actions) の actions サブタイプ表を参照。要約:
 
 | actions の内容 | 推奨レイヤ |
 |---|---|
@@ -158,57 +158,6 @@ marts
 - **マテリアライズの粒度を分析タスク単位に揃える**: 必要な rpt / agg だけ作るので、巨大な汎用 OBT を作って全分析を 1 つの DS に押し込む形は避ける
 
 軽い分析（メトリック 1〜2 個を別 dim から重ねるだけ等）は fct_/dim_ 直読 + Data Blending で済ませてよい。rpt_ は「Data Blending では足りない / 複数 dim の組合せ的分析」の場合に作る。agg_ は「同じ重い集計を何度も BI でする」場合に作る。
-
-## アンチパターン
-
-### staging に JOIN を入れる
-
-```
-❌ stg_orders_with_customers.tfl  (stg なのに JOIN がある)
-✅ stg_orders.tfl + stg_customers.tfl + int_orders_with_customers.tfl
-```
-
-### marts でビジネスロジックを書く
-
-```
-❌ fct_sales.tfl 内で「優良顧客フラグ」を計算
-✅ int_customer_classified.tfl で計算 → marts は集約のみ
-```
-
-### 巨大 intermediate を放置
-
-```
-❌ int_everything.tfl (60 ノード、複数 entity の変換が一緒くた)
-✅ entity 別に分割: int_orders_*.tfl + int_customers_*.tfl + int_products_*.tfl
-```
-
-intermediate は **原則 1 entity 1 .tfl**（[intermediate-decomposition.md](intermediate-decomposition.md)）。「巨大」の解は entity 分割が一般解。同一 entity 内が 30+ ノードに膨らむ場合のみ、同ファイルの例外条件（中間結果を別 entity からも参照する等）を満たすことを確認した上で `int_<entity>_step1_*` の連鎖分割に進む。
-
-### fct_ の中に dim 情報を埋め込む
-
-```
-❌ fct_sales.tfl の中で customer 情報を JOIN 済みにして 1 つの Published DS にする
-   （fct と dim の境界が壊れ、dim_customer を別 fct から再利用できなくなる）
-✅ fct_sales.tfl + dim_customer.tfl は単体 Published DS として publish。
-   結合済みが必要な分析タスクには rpt_sales_with_customer.tfl を別途作る
-```
-
-### 汎用 OBT を 1 つだけ作って全分析を押し込む
-
-```
-❌ rpt_all_sales_data.tfl（全 dim を結合した巨大 OBT を 1 つだけ作り、全分析がこれを読む）
-✅ 分析タスクごとに必要な dim だけ JOIN した rpt_<scope>.tfl を作る
-   （無駄な列・行を持たない、マテリアライズコストも分散）
-```
-
-### agg を raw source / int から独立に組む
-
-```
-❌ agg_revenue_monthly.tfl が stg_orders や int_orders_enriched を Input にして月次集計
-   （fct_sales の集計ロジックと重複し、定義の乖離リスク）
-✅ agg_revenue_monthly.tfl は fct_sales を Input にして粒度変更のみ
-   （ビジネスロジックは fct で一意、agg は再集計だけを担う）
-```
 
 ## 参考
 

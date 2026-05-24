@@ -1,11 +1,11 @@
 ---
 name: prep-deployer
-description: prep-builder が生成した .tfl 群を Tableau Server/Cloud に publish し、フローを run し、(将来) VDS でデータ品質テストを行う。session intake で goal と target path がユーザーから合意された前提で、publish / run / test を承認プロンプトなしで自律実行する。失敗時は autonomous-recovery のマッピングで原因を分類し、回復可能な種別はリトライループ、回復不能な種別 (認証 / 権限 / 容量 / Cloud 障害) は escalation。preflight (不足サブプロジェクトの作成) → flow publish → ジョブ実行 → ステータス取得を REST API で行う。Cloud 側の **構造読み取り** は prep-extractor の Phase B (deploy-context.md) に委譲し、本 Skill は **書き込み副作用とその自律実行・回復** に専念。.tfl 群が手元に揃っていてサーバーに届けたいとき、publish 済み flow を実行したいとき、ジョブ結果を確認したいときに起動。
+description: prep-builder が生成した .tfl 群を Tableau Server/Cloud に publish し、フローを run する。session intake で goal と target path がユーザーから合意された前提で、publish / run を承認プロンプトなしで自律実行する。失敗時は autonomous-recovery のマッピングで原因を分類し、回復可能な種別はリトライループ、回復不能な種別 (認証 / 権限 / 容量 / Cloud 障害) は escalation。preflight (不足サブプロジェクトの作成) → flow publish → ジョブ実行 → ステータス取得を REST API で行う。Cloud 側の **構造読み取り** は prep-extractor の Phase B (deploy-context.md) に委譲し、本 Skill は **書き込み副作用とその自律実行・回復** に専念。.tfl 群が手元に揃っていてサーバーに届けたいとき、publish 済み flow を実行したいとき、ジョブ結果を確認したいときに起動。
 ---
 
 # prep-deployer
 
-prep-builder が組み立てた .tfl 群を Tableau Server/Cloud に届け、運用副作用 (preflight / publish / run / test) を扱う Skill。**session intake (CLAUDE.md step 0) で goal (Q2) と target path (Q4) が合意済みの前提で、書き込み操作は承認プロンプトを出さずに自律実行する**。失敗は [autonomous-recovery](references/autonomous-recovery.md) のマッピングで分類し、回復可能なら自動リトライ、回復不能なら escalation。
+prep-builder が組み立てた .tfl 群を Tableau Server/Cloud に届け、運用副作用 (preflight / publish / run) を扱う Skill。**session intake (CLAUDE.md step 0) で goal (Q2) と target path (Q4) が合意済みの前提で、書き込み操作は承認プロンプトを出さずに自律実行する**。失敗は [autonomous-recovery](references/autonomous-recovery.md) のマッピングで分類し、回復可能なら自動リトライ、回復不能なら escalation。
 
 本 Skill は他 3 Skill と異なり `context: fork` を **付けない**。理由は publish / run の失敗を主会話で観測し、recovery ループの最終 escalation を主会話に報告する必要があるため。
 
@@ -73,13 +73,6 @@ run 1 件ごとに [scripts/publish_manifest.py update-run](../../../scripts/pub
 失敗時の自律回復: [references/autonomous-recovery.md](references/autonomous-recovery.md)
 スクリプト: `scripts/run_flow.py`, `scripts/get_job_status.py`, [../../../scripts/publish_manifest.py](../../../scripts/publish_manifest.py)
 
-### Test (将来)
-
-VizQL Data Service で Published DS にアサーション (not_null / unique / row_count / accepted_values 等) を投げ、データ品質をチェックする。承認モデルは publish / run と同じ (session intake の合意のみ)。
-
-詳細手順: [references/vds-assertions.md](references/vds-assertions.md)
-スクリプト: `scripts/test_published_ds.py` (未実装)
-
 ## 失敗時の戻り先
 
 | 発覚タイミング | よくある原因 | 自律対処 / 戻り先 |
@@ -90,7 +83,6 @@ VizQL Data Service で Published DS にアサーション (not_null / unique / r
 | publish 中の HTTP 401/403/5xx | 認証 / 権限 / 容量 / Cloud 障害 | escalation (AI では回復不可) |
 | run で `finishCode=1` (notes: "Input ... not found") | 上流 PDS 未 publish | 上流レイヤを完走させてから再 run |
 | run で `finishCode=1` (notes: "authentication" / "permission") | 認証失効 / 権限不足 | escalation |
-| test で件数不一致 | actions 分割の不備 | prep-architect の decompose に戻ることもあり |
 
 詳細マッピングと retry 上限・loop 検知は [references/autonomous-recovery.md](references/autonomous-recovery.md) に集約。
 
@@ -101,7 +93,6 @@ VizQL Data Service で Published DS にアサーション (not_null / unique / r
 | 「publish 先を確認して」「環境チェック」 | `deploy-context.md` が無ければ prep-extractor Phase B 起動を案内 → Preflight |
 | 「publish して」 | `deploy-context.md` で前提確認 → 不足あれば Preflight → Publish → recovery ループ |
 | 「実行して」「動かして」 | Run 実行 (publish 済み前提) → recovery ループ |
-| 「テストして」 | Test 実行 (将来) |
 | 「デプロイして」「本番に出して」 | Preflight → Publish → Run を一気通貫、失敗時は autonomous-recovery で自律対処 |
 
 書き込み副作用は session intake で合意済みのため、各フェーズ開始時の追加プロンプトは出さない。escalation 発火時のみ主会話に報告する。
@@ -120,7 +111,7 @@ OAUTH_CALLBACK_PORT=8765   # optional, default 8765
 
 ## 実行ポリシー (最重要)
 
-1. **承認は session intake で取り切る** — Q2 (goal) と Q4 (target path) が合意された時点で publish / run / test を一気通貫で実行
+1. **承認は session intake で取り切る** — Q2 (goal) と Q4 (target path) が合意された時点で publish / run を一気通貫で実行
 2. **失敗は自律ループで回復を試みる** — [autonomous-recovery](references/autonomous-recovery.md) の symptom→fix マッピングで分類、リトライ上限内で再試行
 3. **回復不能種別は即 escalation** — 認証 / 権限 / 容量 / Cloud 障害 / loop 検知発火は AI では直せないので主会話に報告
 4. **自動ロールバックはしない** — Tableau Cloud のバージョン履歴から手動で戻す方が監査ログがクリーン
@@ -139,7 +130,6 @@ OAUTH_CALLBACK_PORT=8765   # optional, default 8765
 | `scripts/get_job_status.py` | ジョブステータス取得 |
 | `scripts/discover_pds_dbname.py` | 1 PDS の物理 dbname を Cloud から resolve (debug / 1 件 patch 用、複数件まとめては `auto_patch_downstream.py`) |
 | `scripts/auto_patch_downstream.py` | manifest の `run.status=success` 全件を ready 集合に、全 .tfl の LoadSqlProxy を一括 patch (idempotent) |
-| `scripts/test_published_ds.py` | (将来) VDS でアサーション実行 |
 
 Cloud 側の **構造読み取り** (`deploy-context.md` 生成) は [prep-extractor の `get_project_structure.py`](../prep-extractor/scripts/get_project_structure.py) を使う (本 Skill では読み取り系スクリプトを持たない)。
 
