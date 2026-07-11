@@ -618,6 +618,65 @@ def normalize_source_containers(
     return out, skipped
 
 
+# nodeProperties keys for incremental refresh / output refresh mode. These live
+# at flow["nodeProperties"][<node-id>] (NOT on the node dicts), keyed by the
+# serializer's fully-qualified class names.
+INCREMENTAL_CONFIG_KEY = "com.tableau.loom.doc.fileformat.v2020_2_1.IncrementalConfiguration"
+OUTPUT_REFRESH_OPTIONS_KEY = "com.tableau.loom.doc.fileformat.v2020_2_1.OutputRefreshOptions"
+
+
+def set_incremental_refresh(
+    flow: dict[str, Any],
+    *,
+    input_node_id: str,
+    control_field: str,
+    output_node_id: str,
+    output_field: str,
+    is_incremental_default: bool = True,
+) -> None:
+    """Configure incremental refresh + append output on a built flow.
+
+    Mirrors what Prep Builder writes for "incremental refresh with append":
+      - nodeProperties[input_node_id].IncrementalConfiguration: enabled,
+        RefreshByOutput semantics - on each incremental run, read only input
+        rows whose `control_field` exceeds max(`output_field`) already present
+        in the output identified by `output_node_id`.
+      - nodeProperties[output_node_id].OutputRefreshOptions: append on BOTH
+        full and incremental runs (accumulating output). A full run therefore
+        appends the whole current snapshot - duplicate rows if fired against an
+        already-populated output. Run this flow incrementally.
+
+    `is_incremental_default=True` marks incremental as the flow's default run
+    mode (source flows authored in Prep UI often carry false here and rely on
+    the Cloud schedule's run-type setting instead; REST-triggered runs have no
+    runMode parameter in TSC, so the default is what fires).
+
+    Only append/append is supported because that is the only combination
+    observed and verified; other output operations would be guesswork.
+
+    Merges into existing nodeProperties entries (does not clobber other keys).
+    """
+    nodes = flow.get("nodes") or {}
+    if input_node_id not in nodes:
+        raise KeyError(f"input_node_id {input_node_id} not in flow nodes")
+    if output_node_id not in nodes:
+        raise KeyError(f"output_node_id {output_node_id} not in flow nodes")
+    props = flow.setdefault("nodeProperties", {})
+    props.setdefault(input_node_id, {})[INCREMENTAL_CONFIG_KEY] = {
+        "nodePropertyType": ".v2020_2_1.RefreshByOutput",
+        "incrementalEnabled": True,
+        "controlFieldName": control_field,
+        "outputNodeId": output_node_id,
+        "outputFieldName": output_field,
+    }
+    props.setdefault(output_node_id, {})[OUTPUT_REFRESH_OPTIONS_KEY] = {
+        "nodePropertyType": ".v2020_2_1.OutputRefreshOptions",
+        "outputOperationType": "outputOperationTypeAppend",
+        "incrementalOutputOperationType": "outputOperationTypeAppend",
+        "isIncrementalDefault": is_incremental_default,
+    }
+
+
 def verify_lineage_closure(
     new_flow: dict[str, Any],
     source_flow: dict[str, Any],

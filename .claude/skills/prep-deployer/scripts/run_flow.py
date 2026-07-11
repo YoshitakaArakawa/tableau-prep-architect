@@ -8,10 +8,20 @@ Waits for completion by default (--no-wait to fire-and-forget). On completion,
 emits a final line `RESULT_JSON: {...}` carrying structured status so an AI
 agent driving the recovery loop can parse it without scraping human text.
 
+Run mode:
+    Default is a FULL run (replaces the output extract). Pass --incremental for
+    an incremental run (reads only source rows past the control field's
+    high-water mark and APPENDS). Incremental only makes sense for flows built
+    with incremental refresh + append output (flow_io.set_incremental_refresh) -
+    on a full/replace flow it behaves like a full run. Conversely, running an
+    APPEND flow in full mode duplicates its output, so after the initial
+    baseline full run, always use --incremental for append flows.
+
 Usage:
     python run_flow.py --flow-name "stg_orders" --project-name "Sales Analytics/stg"
     python run_flow.py --flow-id <luid>
     python run_flow.py --flow-id <luid> --no-wait
+    python run_flow.py --flow-id <luid> --incremental
 """
 
 from __future__ import annotations
@@ -47,7 +57,25 @@ def parse_args():
                    help="Polling interval in seconds (default: 30)")
     p.add_argument("--timeout", type=int, default=3600,
                    help="Max wait in seconds (default: 3600)")
+    p.add_argument("--incremental", action="store_true",
+                   help="Run in incremental mode (append only new source rows). "
+                        "Required for append flows after their baseline full run; "
+                        "a full run of an append flow duplicates its output.")
     return p.parse_args()
+
+
+def start_flow_run(server, flow, *, incremental: bool):
+    """Trigger a flow run. TSC's flows.refresh() posts an empty body = FULL run;
+    for incremental we hand-roll the /run POST with a flowRunSpec runMode."""
+    if not incremental:
+        return server.flows.refresh(flow)
+    # runMode="incremental" needs flowId inside the spec, else Tableau 404s on
+    # flow 'null'. Verified against REST API 3.x /flows/<id>/run.
+    url = f"{server.flows.baseurl}/{flow.id}/run"
+    body = (f'<tsRequest><flowRunSpec flowId="{flow.id}" '
+            f'runMode="incremental"/></tsRequest>').encode("utf-8")
+    resp = server.flows.post_request(url, body)
+    return TSC.JobItem.from_response(resp.content, server.namespace)[0]
 
 
 def find_flow(server, *, flow_id, flow_name, project_name):
@@ -81,8 +109,9 @@ def main():
                          flow_name=args.flow_name,
                          project_name=args.project_name)
 
-        job = server.flows.refresh(flow)
-        print(f"Started flow run. Job id: {job.id}")
+        job = start_flow_run(server, flow, incremental=args.incremental)
+        mode = "incremental" if args.incremental else "full"
+        print(f"Started flow run ({mode}). Job id: {job.id}")
 
         if not args.wait:
             emit_result({

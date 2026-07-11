@@ -379,6 +379,30 @@ verify: Rename-back 適用後の出力列集合が plan の Rename-back 表の `
 
 **⚠️ 出力 PDS シェルの凍結**: Prep が作る出力 PDS の .tds field メタデータは **PDS 初回作成時のスキーマで凍結され、以後の flow run では更新されない** (run は hyper 側のデータ/スキーマのみ更新)。新規 build なら初回 run 時点で rename-back 済みスキーマになるので問題ないが、**publish 済み PDS が存在する状態で後から出力スキーマを変える修正** (rename-back の後付け等) をすると、シェル (= Catalog / Metadata API が読む field list) と物理 hyper が乖離する。データサーバー経由の消費者 (Workbook / 下流 Prep) は hyper 側の正しいスキーマを見るが、Metadata API 検証は偽 FAIL になる。対処: PDS を削除して flow run で作り直す (LUID/content_url が変わる) か、full .tdsx を DL → .tds 内の旧名を書換 → Overwrite republish でシェルだけ直す (LUID/content_url 保持)。
 
+#### 3d-3. incremental refresh / append 出力の継承 (元フローが incremental の場合のみ)
+
+plan の該当 .tfl に「incremental 継承方針」がある場合 (decompose-self-check 項目 16、flow-summary.md の Meta `Incremental inputs` / `Append-mode outputs` が一次シグナル)、元フローの refresh 設定を新 .tfl に焼き込む。**append + incremental を引き継ぐ .tfl は通常「元 Output を引き継ぐ層」** (元フローが Output を 1 つ持つなら、その処理を含む層 = 多くは int または mart)。
+
+```python
+from flow_io import set_incremental_refresh
+
+set_incremental_refresh(
+    new_flow,
+    input_node_id=<incremental input の LSP node id>,   # 元フローで incrementalEnabled=true だった入力に対応
+    control_field="Date",                                # 元 IncrementalConfiguration.controlFieldName の caption
+    output_node_id=out_node["id"],
+    output_field="Date",                                 # 出力側 control 列 (通常 control_field と同名)
+    is_incremental_default=True,                          # REST /run に runMode 引数が無いので default を incremental に
+)
+```
+
+これは `flow["nodeProperties"]` に `IncrementalConfiguration` (入力) + `OutputRefreshOptions` (出力、append/append) を書き込む。build ヘルパは append/append のみ対応 (実証済みの組合せに限定)。
+
+**運用上の重要な注意 (プラン Migration order + publish-recipe に反映)**:
+
+- **append 出力は full run で重複する**。初回だけ full run で baseline を作り (新規 PDS = 現スナップショット 1 バッチ)、**以後は必ず incremental run** ([run_flow.py](../scripts/run_flow.py) `--incremental`)。full run を再度当てると 2 倍になる
+- 元 PDS が過去の累積履歴を持つ場合、それは現ソースに残っていないので新 mart には初回 baseline 分しか入らない。**履歴 backfill が要るかは業務判断** (plan 項目 16)
+
 #### 3e. 不要フィールドの除去
 
 新 .tfl では:

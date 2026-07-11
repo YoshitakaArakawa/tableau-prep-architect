@@ -44,6 +44,13 @@ publish に進む前に確認すべき項目：
 
 **なぜ run まで挟むか**: 各レイヤの flow Input (LoadSqlProxy) は上流レイヤの **Published DS が Cloud 上に既に存在すること** を前提に publish される。run 前は publish 自体は通っても、上流 PDS が無い状態で run すると `Input data source not found` で finishCode=1。1 レイヤ完了 (publish + run + 成功確認) してから次レイヤに進む。
 
+**append / incremental フローの run 規律 (元フローが incremental だった .tfl のみ)**: 出力が append モードの .tfl ([build-recipe §3d-3](../../prep-builder/references/build-recipe.md) の `set_incremental_refresh`) は run 種別に注意する。
+
+- `run_flow.py` / `run_layer.py` の既定は **full run** (空 body の `/run`)。append 出力に full run を当てると**現スナップショットが毎回追記され出力が多重化する** (実際に #2 で 112→224 の事故を踏んだ)
+- 正しい運用: **初回だけ full run で baseline を作り、以後は `run_flow.py --incremental`**。incremental run は control field の high-water mark を超える新規行のみ読んで append する
+- **重複させてしまったら**: 出力 PDS を削除 → full run で 1 バッチ分を作り直し (LUID/dbname が変わるので下流 .tfl を `auto_patch_downstream.py` で再 patch) → 以後 incremental
+- 本番スケジュールでは Tableau 側のスケジュール run-type を incremental に設定する (REST /run には runMode を毎回渡す必要があるが、スケジュールは設定で固定できる)
+
 **dbname の publish/run 時挙動**:
 
 - publish 時には `dbname` の **存在** が必須 (欠落で publish 拒否、対処は本ファイル末尾の対処表参照)。中身は妥当性チェックされない (placeholder 文字列で OK)
