@@ -43,3 +43,6 @@ venv/
 
 # OAuth session cache (access_token, site_name). Bearer token — NEVER commit.
 /.auth-cache/
+
+# Tableau Hyper runtime log (local paths / PIDs; written to CWD by hyperd during runs)
+hyperd.log
