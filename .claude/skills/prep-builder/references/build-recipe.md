@@ -364,6 +364,8 @@ add_edge(rb, out_node["id"])
 
 verify: Rename-back 適用後の出力列集合が plan の Rename-back 表の `original name` を全て含み、`internal name` を 1 つも含まないこと (内部名の露出ゼロ)。
 
+**⚠️ 出力 PDS シェルの凍結**: Prep が作る出力 PDS の .tds field メタデータは **PDS 初回作成時のスキーマで凍結され、以後の flow run では更新されない** (run は hyper 側のデータ/スキーマのみ更新)。新規 build なら初回 run 時点で rename-back 済みスキーマになるので問題ないが、**publish 済み PDS が存在する状態で後から出力スキーマを変える修正** (rename-back の後付け等) をすると、シェル (= Catalog / Metadata API が読む field list) と物理 hyper が乖離する。データサーバー経由の消費者 (Workbook / 下流 Prep) は hyper 側の正しいスキーマを見るが、Metadata API 検証は偽 FAIL になる。対処: PDS を削除して flow run で作り直す (LUID/content_url が変わる) か、full .tdsx を DL → .tds 内の旧名を書換 → Overwrite republish でシェルだけ直す (LUID/content_url 保持)。
+
 #### 3e. 不要フィールドの除去
 
 新 .tfl では:
