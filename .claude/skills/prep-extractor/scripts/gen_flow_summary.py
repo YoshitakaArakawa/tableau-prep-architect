@@ -20,15 +20,21 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+REPO_ROOT = Path(__file__).resolve().parents[4]
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from inspect_actions import summarise_action  # noqa: E402
+from flow_io import container_convertibility, iter_container_children  # noqa: E402
 
 # nodeTypes this repo's toolchain understands (see references/tfl-json-schema.md).
 # Anything else is processed anyway but flagged in Warnings.
+# "Container" is the old-serialization Clean step (loomContainer with
+# single-action children); its internals are surfaced like SuperTransform
+# actions.
 KNOWN_NODE_TYPES = {
     "LoadSqlProxy", "LoadSql", "LoadHyper", "LoadCsv", "LoadExcel",
     "SuperTransform", "SuperJoin", "SuperUnion", "SuperAggregate",
-    "SuperNewRows", "SuperPivot",
+    "SuperNewRows", "SuperPivot", "Container",
     "PublishExtract", "WriteToHyper", "WriteToCsv",
 }
 
@@ -80,17 +86,83 @@ def action_annotations(node: dict) -> list[dict]:
     return [a.get("annotationNode", {}) for a in node.get("beforeActionAnnotations", []) or []]
 
 
+def step_actions(node: dict) -> tuple[str, list[dict]]:
+    """Unified per-node action list, annotationNode-shaped regardless of format.
+
+    Returns (kind, actions) where kind is:
+      - "flat"      : SuperTransform beforeActionAnnotations (new serialization)
+      - "container" : .v1.Container loomContainer children (old serialization)
+      - "input"     : Input node's `actions` (typically RenameColumn realizing
+                      obfuscated field names into display captions)
+      - ""          : node carries no step-level actions
+    All three shapes hold the action fields (columnName / rename / expression /
+    columnNames / filterExpression ...) directly on each dict, so
+    summarise_action works on any of them.
+    """
+    ntype = strip_type(node.get("nodeType", ""))
+    if ntype == "SuperTransform":
+        return "flat", action_annotations(node)
+    if ntype == "Container":
+        return "container", iter_container_children(node)
+    if node.get("baseType") == "input" and node.get("actions"):
+        return "input", list(node["actions"])
+    return "", []
+
+
 def actions_cell(node: dict) -> str:
     """Type-wise count summary for the Topology table, e.g. 'Rename×4, AddColumn×1'."""
-    if not strip_type(node.get("nodeType", "")).endswith("SuperTransform"):
+    kind, actions = step_actions(node)
+    if not kind:
         return "—"
+    if not actions:
+        return "0 actions"
     counts = Counter(
         ACTION_LABEL.get(strip_type(an.get("nodeType", "")), strip_type(an.get("nodeType", "")))
-        for an in action_annotations(node)
+        for an in actions
     )
-    if not counts:
-        return "0 actions"
-    return ", ".join(f"{t}×{c}" for t, c in counts.items())
+    cell = ", ".join(f"{t}×{c}" for t, c in counts.items())
+    return f"{cell} (input)" if kind == "input" else cell
+
+
+def refresh_semantics(flow: dict) -> dict:
+    """Extract incremental-refresh / append-output settings from nodeProperties.
+
+    These live OUTSIDE the nodes dict (flow['nodeProperties'][<node-id>]) so a
+    node-walk alone never sees them - yet they change what "parity" means:
+    an append-mode output accumulates rows across runs, so the original PDS's
+    total row count can never be reproduced by a single full run of the
+    decomposed flows.
+
+    Returns {"incremental_inputs": [(node_name, control_caption)],
+             "append_outputs": [node_name]}.
+    """
+    nodes = flow.get("nodes") or {}
+
+    def caption_of(field_uuid: str) -> str:
+        for n in nodes.values():
+            for f in n.get("fields") or []:
+                if f.get("name") == field_uuid and f.get("caption"):
+                    return f["caption"]
+        return field_uuid
+
+    inc_inputs: list[tuple[str, str]] = []
+    append_outputs: list[str] = []
+    for nid, props in (flow.get("nodeProperties") or {}).items():
+        if not isinstance(props, dict):
+            continue
+        node_name = nodes.get(nid, {}).get("name", nid[:8])
+        for pkey, pval in props.items():
+            if not isinstance(pval, dict):
+                continue
+            short = pkey.split(".")[-1]
+            if short == "IncrementalConfiguration" and pval.get("incrementalEnabled"):
+                ctrl = pval.get("controlFieldName") or "?"
+                inc_inputs.append((node_name, caption_of(ctrl)))
+            if short == "OutputRefreshOptions":
+                op = pval.get("outputOperationType") or ""
+                if "Append" in op:
+                    append_outputs.append(node_name)
+    return {"incremental_inputs": inc_inputs, "append_outputs": append_outputs}
 
 
 def mermaid_label(sid: int, ntype: str, name: str) -> str:
@@ -118,7 +190,12 @@ def build_summary(flow_path: Path, flow_name_override: str | None = None) -> str
     flow_name = flow_name_override or flow.get("name") or flow_path.stem
     if flow_name == "flow" and flow_name_override is None:
         flow_name = flow_path.stem
-    total_actions = sum(len(action_annotations(nodes[n])) for n in order)
+    kind_totals: Counter = Counter()
+    for n in order:
+        kind, actions = step_actions(nodes[n])
+        if kind:
+            kind_totals[kind] += len(actions)
+    total_actions = sum(kind_totals.values())
     type_counts = Counter(strip_type(nodes[n].get("nodeType", "")) for n in order)
 
     L: list[str] = []
@@ -130,8 +207,19 @@ def build_summary(flow_path: Path, flow_name_override: str | None = None) -> str
     L.append(f"- Source: `{flow_path}`")
     L.append(f"- Flow name: {flow_name}")
     L.append(f"- Total nodes: {len(order)}")
-    L.append(f"- Total actions (across SuperTransforms): {total_actions}")
+    breakdown = ", ".join(
+        f"{label}: {kind_totals[k]}"
+        for k, label in (("flat", "SuperTransform"), ("container", "Container"), ("input", "Input renames"))
+        if kind_totals.get(k)
+    ) or "none"
+    L.append(f"- Total actions (across SuperTransforms): {total_actions} ({breakdown})")
     L.append("- Distinct nodeTypes: " + ", ".join(f"{t}({c})" for t, c in type_counts.items()))
+    refresh = refresh_semantics(flow)
+    if refresh["incremental_inputs"]:
+        L.append("- Incremental inputs: " + ", ".join(
+            f"{nm} (control field: {ctrl})" for nm, ctrl in refresh["incremental_inputs"]))
+    if refresh["append_outputs"]:
+        L.append("- Append-mode outputs: " + ", ".join(refresh["append_outputs"]))
     L.append(f"- Generated at: {datetime.now(timezone.utc).isoformat(timespec='seconds')}")
     L.append("")
 
@@ -167,14 +255,22 @@ def build_summary(flow_path: Path, flow_name_override: str | None = None) -> str
     L.append("")
 
     # --- Actions inventory ---
+    # Covers all three action-carrying formats (see step_actions): flat
+    # SuperTransform, old-serialization Container clean steps, and Input-node
+    # rename actions. Section title kept stable for downstream consumers.
+    KIND_TAG = {"container": " [container 形式]", "input": " [Input renames]"}
     L.append("## SuperTransform actions inventory")
     L.append("")
     for nid in order:
         n = nodes[nid]
-        if not strip_type(n.get("nodeType", "")).endswith("SuperTransform"):
+        kind, ans = step_actions(n)
+        if not kind:
             continue
-        ans = action_annotations(n)
-        L.append(f"### #{sid[nid]}: {n.get('name', '?')} ({len(ans)} actions)")
+        if kind == "input" and not ans:
+            continue  # inputs without actions are not clean steps; skip silently
+        L.append(
+            f"### #{sid[nid]}: {n.get('name', '?')} ({len(ans)} actions){KIND_TAG.get(kind, '')}"
+        )
         L.append("")
         if not ans:
             L.append("_(no actions — empty Clean step)_")
@@ -203,16 +299,26 @@ def build_summary(flow_path: Path, flow_name_override: str | None = None) -> str
             warnings.append(
                 f"- ⚠️ Unknown nodeType: `{ntype}` at node #{sid[nid]}（レイヤ推定保留、build 時は転写のみ）"
             )
-        for i, an in enumerate(action_annotations(n), 1):
+        kind, actions = step_actions(n)
+        for i, an in enumerate(actions, 1):
             at = strip_type(an.get("nodeType", ""))
             if at not in KNOWN_ACTION_TYPES:
                 warnings.append(
                     f"- ⚠️ Unknown action type: `{at}` at node #{sid[nid]} action {i}（raw JSON で残す）"
                 )
-        if ntype == "SuperTransform" and not action_annotations(n):
+        if kind in ("flat", "container") and not actions:
             warnings.append(
-                f"- 💡 Empty SuperTransform: #{sid[nid]} ({n.get('name', '?')}) has 0 actions — 削除候補（decompose で判断）"
+                f"- 💡 Empty {'SuperTransform' if kind == 'flat' else 'Container'}: "
+                f"#{sid[nid]} ({n.get('name', '?')}) has 0 actions — 削除候補（decompose で判断）"
             )
+        if ntype == "Container":
+            problems = container_convertibility(n)
+            if problems:
+                warnings.append(
+                    f"- ⚠️ Container not convertible: #{sid[nid]} ({n.get('name', '?')}) — "
+                    + "; ".join(problems)
+                    + "（build 時は verbatim 転写のみ、actions 分割不可）"
+                )
         if nid not in reachable:
             warnings.append(
                 f"- 💡 Disconnected node: #{sid[nid]} ({n.get('name', '?')}) is not reachable from initialNodes"
@@ -226,6 +332,14 @@ def build_summary(flow_path: Path, flow_name_override: str | None = None) -> str
         if c > 1:
             ids = ", ".join(f"#{sid[n]}" for n in order if nodes[n].get("name") == name)
             warnings.append(f"- 💡 Duplicate name: `{name}` appears at {ids}（build 時にファイル名を区別）")
+    if refresh["incremental_inputs"] or refresh["append_outputs"]:
+        inc_s = ", ".join(f"`{nm}` (control=`{ctrl}`)" for nm, ctrl in refresh["incremental_inputs"]) or "なし"
+        app_s = ", ".join(f"`{nm}`" for nm in refresh["append_outputs"]) or "なし"
+        warnings.append(
+            f"- 🔒 Incremental/append flow: incremental input(s): {inc_s} / append output(s): {app_s}。"
+            "append 出力の PDS は過去 run の累積のため **全体行数 parity は成立しない** — "
+            "decompose で継承方針を設計し (self-check 項目 16)、compare は control field による期間一致で行う"
+        )
 
     L.append("## Warnings")
     L.append("")

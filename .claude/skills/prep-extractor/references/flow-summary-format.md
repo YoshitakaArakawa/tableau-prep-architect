@@ -42,8 +42,12 @@ note: トップレベル構造、Meta / Topology / Dependency DAG / SuperTransfo
 - Total nodes: 29
 - Total actions (across SuperTransforms): 91
 - Distinct nodeTypes: LoadSqlProxy(1), LoadSql(1), SuperTransform(18), SuperJoin(3), SuperUnion(2), SuperAggregate(1), SuperNewRows(1), PublishExtract(2)
+- Incremental inputs: Stock and Index Price (control field: Date)
+- Append-mode outputs: Output
 - Generated at: <ISO-date>
 ```
+
+`Incremental inputs` / `Append-mode outputs` の 2 行は **該当がある場合のみ** 出力される。ソースは `flow["nodeProperties"]` の `IncrementalConfiguration` (incrementalEnabled=true の Input と control field caption) と `OutputRefreshOptions` (outputOperationType が Append の Output)。nodes の walk では見えない場所にあるため、この行の有無が incremental フロー検出の一次シグナルになる。
 
 ### Topology
 
@@ -69,7 +73,7 @@ note: トップレベル構造、Meta / Topology / Dependency DAG / SuperTransfo
 - `Name`: Prep UI 表示名
 - `Prev`: 逆引きした前段ノードの短 ID（複数なら `,` 区切り）
 - `Next`: `nextNodes[].nextNodeId` を短 ID に変換（複数なら `,` 区切り）
-- `Actions`: SuperTransform の場合、`beforeActionAnnotations` を type 別にカウントしてカンマ区切り。SuperTransform 以外は `—`
+- `Actions`: 操作を持つステップ（flat SuperTransform / Container / Input renames）は type 別カウントをカンマ区切り。Input 由来は末尾に `(input)` を付す。操作を持たないノードは `—`
 
 ### Dependency DAG (Mermaid)
 
@@ -101,7 +105,20 @@ graph TD
 
 ### SuperTransform actions inventory
 
-各 SuperTransform の `beforeActionAnnotations` を 1 行サマリ化（`scripts/inspect_actions.py` 出力と同形式）：
+各ステップの操作列を 1 行サマリ化（`scripts/inspect_actions.py` 出力と同形式）。セクション名は互換のため固定だが、**3 つの操作保持形式すべて**を収録する（詳細は [tfl-json-schema.md §Clean ステップの 2 つのシリアライズ形式](../../../../references/tfl-json-schema.md#clean-ステップの-2-つのシリアライズ形式)）:
+
+- **flat SuperTransform**: `beforeActionAnnotations` — 見出しにタグなし
+- **Container**（`.v1.Container` の Clean ステップ）: `loomContainer` 子ノード — 見出しに ` [container 形式]`
+- **Input renames**: Input ノードの `actions`（難読化 UUID → 表示名の RenameColumn 等）— 見出しに ` [Input renames]`
+
+見出し例（形式タグ付き）:
+
+```markdown
+### #2: Transactions (13 actions) [Input renames]
+### #4: Clean 1 (2 actions) [container 形式]
+```
+
+Meta の `Total actions` 行にも形式別内訳が付く（例: `19 (Container: 6, Input renames: 13)`）。
 
 ```markdown
 ## SuperTransform actions inventory
@@ -156,11 +173,13 @@ actions 種別ごとのフォーマット:
 
 警告の種類:
 - ⚠️ **Unknown nodeType / action type**: 未対応の種別を発見
+- ⚠️ **Container not convertible**: `.v1.Container` が flat SuperTransform に損失なく変換できない（マルチ namespace / 分岐 / ネスト）。build 時は verbatim 転写のみで actions 分割不可
 - ⚠️ **Backward edge / cycle suspected**: トポロジ復元中に循環依存の兆候
-- 💡 **Empty SuperTransform**: actions=0 のノード（削除候補）
+- 💡 **Empty SuperTransform / Empty Container**: actions=0 のノード（削除候補）
 - 💡 **Duplicate name**: 同名ノードが複数存在
 - 💡 **Disconnected node**: どこにも繋がっていないノード
 - 🔒 **SuperUnion node**: **全件必ず 1 行ずつ機械的に追加**。Union ノードは `Table Names` 列を暗黙注入する → 後段の architect が削除候補にする事故を防ぐ
+- 🔒 **Incremental/append flow**: incremental input または append 出力を検出した場合に 1 行追加。append 出力の PDS は過去 run の累積なので**全体行数 parity は成立しない** → architect は継承方針を設計 (decompose-self-check 項目 16)、comparator は control field による期間一致比較に切り替える
 
 ## 出力先
 

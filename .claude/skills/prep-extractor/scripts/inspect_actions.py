@@ -29,6 +29,15 @@ def summarise_action(i: int, an: dict) -> str:
         tgt = an.get('rename', '?')
         return f"{i}. **Rename**: `{src}` → `{tgt}`"
     if t == 'ChangeColumnType':
+        # Two shapes seen: a flat {columnName, newType} and a
+        # {fields: {<col>: {type: <t>, calc: ...}}} map (one entry per cast).
+        fields = an.get('fields')
+        if isinstance(fields, dict) and fields:
+            casts = ', '.join(
+                f"`{col}` → `{(spec or {}).get('type', '?')}`"
+                for col, spec in fields.items()
+            )
+            return f"{i}. **ChangeColumnType**: {casts}"
         col = an.get('columnName', '?')
         nt = an.get('newType') or an.get('typeRef') or an.get('newColumnType') or '?'
         return f"{i}. **ChangeColumnType**: `{col}` → `{nt}`"
