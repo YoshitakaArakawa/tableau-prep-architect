@@ -1,6 +1,5 @@
 ---
 purpose: Tableau Prep の Input ノードを Published Data Source / 仮想接続経由に統一する原則
-fetched_at: 2026-05-17
 note: 違反判定の例、各 Skill での扱い（analyze での違反検出 / decompose での置換 / publish での credentials 扱い）を規定
 ---
 

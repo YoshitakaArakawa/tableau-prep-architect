@@ -1,6 +1,5 @@
 ---
-purpose: Tableau MCP (list-datasources / get-datasource-metadata / query-datasource) を prep-output-comparator から叩く際の癖と回避策
-fetched_at: 2026-05-19
+purpose: Tableau MCP (get-datasource-metadata / query-datasource) を prep-output-comparator から叩く際の癖と回避策
 note: 本 Skill が実際に発行する MCP 呼び出し (get-datasource-metadata と全体行数 COUNT) に必要なレシピのみ。MCP 全般の API ドキュメント代わりではなく、本 Skill が引っかかった落とし穴のみを記載
 ---
 
@@ -11,12 +10,10 @@ Tableau MCP を本 Skill から叩く際の運用上の癖と回避策。
 ## 目次
 
 - 並列叩きで 401 が出る
-- list-datasources の `in` フィルタが効かない
 - query-datasource はフィールド caption (内部 ID ではない)
 - query-datasource のフィールド構造
 - 全体行数を取るレシピ
 - 期間一致カウントのレシピ (append 元出力向け)
-- Unicode フィールド名の扱い
 - レスポンスの読み方
 
 ## 並列叩きで 401 が出る
@@ -27,27 +24,7 @@ Tableau MCP の `get-datasource-metadata` を **4 並列で叩くと、最初の
 
 `list-datasources` と `query-datasource` も予防的に sequential を推奨。
 
-## list-datasources の `in` フィルタが効かない
-
-ドキュメント上は `name:in:[name1,name2,...]` のような `in` 演算子が宣言されているが、実際に叩くと:
-
-```
-Error: Invalid filter expression format: "name2"
-```
-
-のように途中の値で parse エラーになる。複数 DS を引きたい場合は **`name:eq:<name>` を DS 数ぶん sequential で叩く** のが現実的。
-
-```text
-# OK
-list-datasources filter=name:eq:fct_transactions_summary
-list-datasources filter=name:eq:fct_transactions_matched
-
-# NG
-list-datasources filter=name:in:[fct_transactions_summary,fct_transactions_matched]
-list-datasources filter=name:in:fct_transactions_summary,fct_transactions_matched
-```
-
-なお、本 Skill では PDS の LUID 解決は Metadata API で行うため `list-datasources` を叩く機会は基本ない (caller が DS 名で起動した場合のみ補助的に使用)。
+なお本 Skill では LUID 解決は manifest で済むため `list-datasources` を叩く機会は基本ない。補助的に使う場合の注意 1 点のみ: `name:in:[...]` フィルタは parse エラーになる (実測)。`name:eq:<name>` を DS 数ぶん sequential で叩く。
 
 ## query-datasource はフィールド caption (内部 ID ではない)
 
@@ -82,7 +59,7 @@ list-datasources filter=name:in:fct_transactions_summary,fct_transactions_matche
 { "fieldCaption": "銘柄", "function": "COUNT", "fieldAlias": "row_count" }
 ```
 
-`function` に取れる値: `SUM`, `AVG`, `MEDIAN`, `COUNT`, `COUNTD`, `MIN`, `MAX`, `STDEV`, `VAR`, `COLLECT`, `YEAR`, `QUARTER`, `MONTH`, `WEEK`, `DAY`, `TRUNC_YEAR` 系, `AGG`, `NONE`, `UNSPECIFIED`。本 Skill が実際に使うのは `COUNT` のみ。
+本 Skill が `function` に使うのは `COUNT` (と append 用レシピの `MIN` / `MAX`) のみ。
 
 ## 全体行数を取るレシピ
 
@@ -143,18 +120,6 @@ dimension 列の選び方:
 - `minDate`/`maxDate` は Step 1 の値を ISO 形式 (`YYYY-MM-DD`) で渡す
 - control field が date/datetime でない場合は `QUANTITATIVE_NUMERICAL` + `min`/`max` を使う
 - **既知の限界**: 元側は append 時点のソーススナップショットの蓄積なので、その後ソースが過去日を改訂していた場合はレンジ内でも差が出る (これは分解の欠陥ではなくソース改訂。レポートには観察事実として両カウントとレンジを記載する)
-
-## Unicode フィールド名の扱い
-
-日本語列名はそのまま渡せるが、JSON ペイロードで `\uXXXX` エスケープが必要な MCP クライアント実装もある。SDK 側で対応するなら:
-
-```python
-import json
-payload = json.dumps({"fields": [{"fieldCaption": "銘柄", "function": "COUNT"}]},
-                     ensure_ascii=True)  # → "銘柄" に変換される
-```
-
-Tableau MCP は両方受け付ける。本 Skill から叩くときはどちらでもよい。
 
 ## レスポンスの読み方
 

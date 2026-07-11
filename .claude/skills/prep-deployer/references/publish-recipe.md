@@ -1,12 +1,17 @@
 ---
 purpose: 生成済み .tfl 群を Tableau Cloud に publish する具体手順
-fetched_at: 2026-05-17
-note: 前提チェック、推奨 publish 順序（stg → int → marts → rpt）、connections / credentials の扱い、エラーハンドリングを規定
+note: 前提チェック、推奨 publish 順序（stg → int → marts → rpt）、connections / credentials の扱い、manifest 更新を規定。失敗分類は autonomous-recovery.md に委譲
 ---
 
 # publish-recipe
 
 publish フェーズの具体手順。`prep-builder` が生成した .tfl 群を、目的のプロジェクトに publish するワークフロー。
+
+## 目次
+
+- 前提チェック / 推奨 publish/run 順序 (レイヤ間は必ず順次)
+- publish 後の manifest 更新 / `publish_flow.py` の使い方 / `mode` の使い分け
+- Embed Credentials の扱い / バッチ publish / publish エラーの扱い / ロールバック
 
 ## 前提チェック
 
@@ -44,23 +49,22 @@ publish に進む前に確認すべき項目：
 
 **なぜ run まで挟むか**: 各レイヤの flow Input (LoadSqlProxy) は上流レイヤの **Published DS が Cloud 上に既に存在すること** を前提に publish される。run 前は publish 自体は通っても、上流 PDS が無い状態で run すると `Input data source not found` で finishCode=1。1 レイヤ完了 (publish + run + 成功確認) してから次レイヤに進む。
 
-**append / incremental フローの run 規律 (元フローが incremental だった .tfl のみ)**: 出力が append モードの .tfl ([build-recipe §3d-3](../../prep-builder/references/build-recipe.md) の `set_incremental_refresh`) は run 種別に注意する。
+**append / incremental フローの run 規律 (元フローが incremental だった .tfl のみ)**: 出力が append モードの .tfl ([special-outputs-recipe.md](../../prep-builder/references/special-outputs-recipe.md) の `set_incremental_refresh`) は run 種別に注意する。
 
-- `run_flow.py` / `run_layer.py` の既定は **full run** (空 body の `/run`)。append 出力に full run を当てると**現スナップショットが毎回追記され出力が多重化する** (実際に #2 で 112→224 の事故を踏んだ)
+- `run_flow.py` / `run_layer.py` の既定は **full run** (空 body の `/run`)。append 出力に full run を当てると**現スナップショットが毎回追記され出力が多重化する**
 - 正しい運用: **初回だけ full run で baseline を作り、以後は `run_flow.py --incremental`**。incremental run は control field の high-water mark を超える新規行のみ読んで append する
 - **重複させてしまったら**: 出力 PDS を削除 → full run で 1 バッチ分を作り直し (LUID/dbname が変わるので下流 .tfl を `auto_patch_downstream.py` で再 patch) → 以後 incremental
 - 本番スケジュールでは Tableau 側のスケジュール run-type を incremental に設定する (REST /run には runMode を毎回渡す必要があるが、スケジュールは設定で固定できる)
 
 **dbname の publish/run 時挙動**:
 
-- publish 時には `dbname` の **存在** が必須 (欠落で publish 拒否、対処は本ファイル末尾の対処表参照)。中身は妥当性チェックされない (placeholder 文字列で OK)
+- publish 時には `dbname` の **存在** が必須 (欠落で publish 拒否 = 280003、[autonomous-recovery.md](autonomous-recovery.md))。中身は妥当性チェックされない (placeholder 文字列で OK)
 - run 時には **実 dbname が必要** (= 上流 PDS の物理 Hyper 名と一致しないと `Input data source not found` 系で finishCode=1)
-- `flow_io.add_pds_input` は `dbname=None` 渡されたら `<datasourceName>_placeholder` を自動挿入するので publish は通る
-- 上流 publish/run 完了後に [../scripts/auto_patch_downstream.py](../scripts/auto_patch_downstream.py) で実 dbname を一括 resolve → 全 .tfl の LoadSqlProxy + dataConnection 両方の dbname を書き換える。1 PDS だけ debug 等で patch したい場合は [../scripts/discover_pds_dbname.py](../scripts/discover_pds_dbname.py) を直接叩く。
+- `flow_io.add_pds_input` は `dbname=None` 渡されたら `<datasourceName>_placeholder` を自動挿入するので publish は通る。実 dbname への patch は上記 `auto_patch_downstream.py` (1 件だけなら [../scripts/discover_pds_dbname.py](../scripts/discover_pds_dbname.py))
 
-**並列化できる粒度**: 同一レイヤ内の複数 .tfl は **publish のみ並列可**。**run は同一 PAT では直列が前提** — `--wait` を 2 プロセス並列で走らせると、**Tableau Cloud が同一 PAT で 1 active session のみ許可** する仕様により、後発 `run_flow.py` の sign_in が先発の token を server-side で revoke、先発の polling は 401 で死ぬ (TSC client 側の問題ではなく Tableau Cloud の認証仕様、検証済)。並列したい場合は [scripts/run_layer.py](../../../../scripts/run_layer.py) を使う — `run_flow.py --no-wait` を sequential 発火 → 単一 sign-in session で全 jobId を polling → manifest 更新まで一気通貫で行う。server-side では job が並列実行されるため wall-clock は `max(durations)` で済む。詳細と仕組みは [run-and-poll.md の §並列実行と排他](run-and-poll.md#並列実行と排他)。
+**並列化できる粒度**: 同一レイヤ内の複数 .tfl は **publish のみ並列可**。run の並列は同一 OAuth セッションの排他制約があるため [scripts/run_layer.py](../../../../scripts/run_layer.py) 経由で行う (単一 sign-in session で `--no-wait` 発火 → 全 jobId polling、server-side では並列実行)。制約の仕組みは [run-and-poll.md の §並列実行と排他](run-and-poll.md#並列実行と排他)。
 
-**レイヤ間ゲートは承認ではなく依存関係**: 各レイヤ完走 (publish + run + finishCode=0) してから次レイヤへ進むが、これは下流 Input が上流 PDS を参照する依存性のためで、人間承認のためではない。途中レイヤで finishCode=1 や publish エラーが出たら [autonomous-recovery.md](autonomous-recovery.md) で分類 → 自律リトライ or escalation。escalation 発火時は下流レイヤに進まずユーザーに報告。
+**レイヤ間ゲートは承認ではなく依存関係** (下流 Input が上流 PDS を参照するため)。途中レイヤで失敗したら [autonomous-recovery.md](autonomous-recovery.md) で分類、escalation 発火時は下流レイヤに進まない。
 
 `rpt_*` は fct/dim の Published DS を Input として読むので必ず最後。スケジュール実行 (本番運用) では Tableau の Linked Tasks で fct/dim → rpt の連鎖を組む。
 
@@ -107,7 +111,7 @@ python publish_flow.py --file ... --project-path ... --mode Overwrite
 python publish_flow.py --file stg_orders.tfl --project-path "..." --name "stg_orders_v2"
 ```
 
-スクリプトは常に非対話で動く (承認は session intake で済んでいる前提、[autonomous-execution-policy.md](autonomous-execution-policy.md) 参照)。
+スクリプトは常に非対話で動く (承認は session intake で済んでいる前提、[autonomous-recovery.md §実行ポリシー](autonomous-recovery.md) 参照)。
 
 ## `mode` の使い分け
 
@@ -174,21 +178,11 @@ python scripts/run_layer.py --manifest $MANIFEST --layer marts
 
 `run_layer.py` は manifest の対象レイヤから `publish=published` && `run!=success` の全件を拾うので、rpt の追加 publish 後の 2 回目呼び出しでは未 run の rpt のみが選択される。`auto_patch_downstream.py` は idempotent なので各レイヤ完走後に毎回呼んで OK (同じ dbname の re-patch は no-op)。
 
-スクリプトは常に非対話で動き、各レイヤ完走を確認してから次レイヤへ進む (依存関係上のゲートであって承認ゲートではない、[autonomous-execution-policy.md](autonomous-execution-policy.md) 参照)。失敗時の自律対処は [autonomous-recovery.md](autonomous-recovery.md)。
+スクリプトは常に非対話で動き、各レイヤ完走を確認してから次レイヤへ進む。失敗時の自律対処は [autonomous-recovery.md](autonomous-recovery.md)。
 
-## publish エラーの戻り先マップ
+## publish エラーの扱い
 
-`publish_flow.py` が REST エラーを返してきたときの判定基準と戻り先:
-
-| Tableau errorCode | symptom | 想定原因 | 戻り先 |
-|---|---|---|---|
-| `280003` ("Problem reading the provided Flow file") | publish HTTP 400 | (a) 生成 .tfl に `maestroMetadata` 等の aux entry が無い / (b) Input ノードに connection 登録なし (孤立 connectionId) / (c) **複数の重複 Tableau Server connection entry** (KB 005232681) / (d) LoadSqlProxy / dataConnection の `dbname` 欠落 / (e) LoadSqlProxy ノードに必須デフォルトフィールド (`relation`, `actions`, `debugModeRowLimit` 等) の欠落 | (a) `aux_entries=` 渡し忘れを確認 / (b) `flow_io.add_pds_input` で一括登録 / (c) `add_pds_input` は dedup するので自前生成を疑う / (d) `add_pds_input` は dbname=None 渡しても placeholder を自動挿入する / (e) `make_load_sql_proxy_node` のデフォルトに含まれている — 自前構築している場合は要追加 |
-| 4xx `Input data source not found` 系 | publish/run | 上流レイヤの PDS が Cloud 上に存在しない | 上流レイヤの publish + run を先に完走させる ([レイヤ順次の節](#推奨-publishrun-順序-レイヤ間は必ず順次)) |
-| 401 / 403 | publish | access token 失効 / サインインユーザーの権限不足 | [authentication.md](authentication.md) |
-| 404 (project) | publish | preflight 未実施 / project 削除済 | prep-extractor Phase B → preflight 再実行 |
-| 409 (name conflict) | publish | 同名 flow が CreateNew で既存 | `--mode Overwrite` 確認、または名前変更 |
-
-実値 (上記以外のコード) を観測したら本表に追記して育てる。
+`publish_flow.py` が REST エラーを返したら、errorCode を [autonomous-recovery.md の Publish 失敗分類表](autonomous-recovery.md) で分類して対処する (280003 の sub-cause 別対処もそちらに集約)。未知のコードを観測したら recovery 側の表に追記して育てる。
 
 ## ロールバック
 
@@ -200,4 +194,4 @@ publish 失敗時 or publish 後に問題が見つかったときの戻し方：
 | publish は成功したが flow が動かない | Tableau Cloud の **バージョン履歴** から前バージョンに戻す（UI: Flow → Revision History） |
 | 複数 flow を publish 中に途中失敗 | 既に publish 済みのものを **手動で削除 or 戻す**。スクリプト側で自動ロールバックはしない |
 
-失敗の分類と自律対処の詳細は [autonomous-recovery.md](autonomous-recovery.md)。ロールバックは引き続き自動化せず手動 (監査ログ保全のため、[autonomous-execution-policy.md](autonomous-execution-policy.md))。
+ロールバックを自動化しない理由 (監査ログ保全) は [autonomous-recovery.md §ロールバック方針](autonomous-recovery.md)。

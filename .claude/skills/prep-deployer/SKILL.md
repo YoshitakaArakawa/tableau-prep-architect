@@ -1,13 +1,13 @@
 ---
 name: prep-deployer
-description: prep-builder が生成した .tfl 群を Tableau Server/Cloud に publish し、フローを run する。session intake で goal と target path がユーザーから合意された前提で、publish / run を承認プロンプトなしで自律実行する。失敗時は autonomous-recovery のマッピングで原因を分類し、回復可能な種別はリトライループ、回復不能な種別 (認証 / 権限 / 容量 / Cloud 障害) は escalation。preflight (不足サブプロジェクトの作成) → flow publish → ジョブ実行 → ステータス取得を REST API で行う。Cloud 側の **構造読み取り** は prep-extractor の Phase B (deploy-context.md) に委譲し、本 Skill は **書き込み副作用とその自律実行・回復** に専念。.tfl 群が手元に揃っていてサーバーに届けたいとき、publish 済み flow を実行したいとき、ジョブ結果を確認したいときに起動。
+description: prep-builder が生成した .tfl 群を Tableau Server/Cloud に preflight・publish・run する。session intake で goal と target path が合意された前提で承認プロンプトなしに自律実行し、失敗は autonomous-recovery の分類で自動リトライ、回復不能種別 (認証 / 権限 / 容量 / Cloud 障害) は escalation する。.tfl 群が手元に揃っていてサーバーに届けたいとき、publish 済み flow を実行したいとき、ジョブ結果を確認したいとき、「デプロイして」「publish して」「実行して」と言われたときに起動。
 ---
 
 # prep-deployer
 
 prep-builder が組み立てた .tfl 群を Tableau Server/Cloud に届け、運用副作用 (preflight / publish / run) を扱う Skill。**session intake (CLAUDE.md step 0) で goal (Q2) と target path (Q4) が合意済みの前提で、書き込み操作は承認プロンプトを出さずに自律実行する**。失敗は [autonomous-recovery](references/autonomous-recovery.md) のマッピングで分類し、回復可能なら自動リトライ、回復不能なら escalation。
 
-本 Skill は他 3 Skill と異なり `context: fork` を **付けない**。理由は publish / run の失敗を主会話で観測し、recovery ループの最終 escalation を主会話に報告する必要があるため。
+本 Skill は `context: fork` を **付けない**。理由は publish / run の失敗を主会話で観測し、recovery ループの最終 escalation を主会話に報告する必要があるため。
 
 役割分担: **読み取り = prep-extractor** (Phase B: Cloud structure extraction → `deploy-context.md`)、**書き込み = prep-deployer**。preflight 以降の各フェーズは `deploy-context.md` を入力として消費する (無ければ prep-extractor の Phase B を先に呼ぶよう案内)。
 
@@ -79,16 +79,7 @@ run 1 件ごとに [scripts/publish_manifest.py update-run](../../../scripts/pub
 
 ## 失敗時の戻り先
 
-| 発覚タイミング | よくある原因 | 自律対処 / 戻り先 |
-|---|---|---|
-| preflight で target LUID 取得不可 | `deploy-context.md` 不整合 / 親プロジェクト削除済 | prep-extractor Phase B を再実行 → 再 preflight |
-| publish 中の HTTP 400 (280003) | maestroMetadata 欠落 / connection 重複 / dbname 欠落 | prep-builder で .tfl 再 build → 再 publish (最大 3 回) |
-| publish 中の HTTP 409 | 同名 flow が CreateNew で既存 | `--mode Overwrite` で再 publish |
-| publish 中の HTTP 401/403/5xx | 認証 / 権限 / 容量 / Cloud 障害 | escalation (AI では回復不可) |
-| run で `finishCode=1` (notes: "Input ... not found") | 上流 PDS 未 publish | 上流レイヤを完走させてから再 run |
-| run で `finishCode=1` (notes: "authentication" / "permission") | 認証失効 / 権限不足 | escalation |
-
-詳細マッピングと retry 上限・loop 検知は [references/autonomous-recovery.md](references/autonomous-recovery.md) に集約。
+失敗の分類表・修正アクション・リトライ上限・loop 検知・escalation 境界は [references/autonomous-recovery.md](references/autonomous-recovery.md) に集約。方向感: .tfl 自体の不備 (280003 等) は prep-builder に戻る、Cloud 構造の不整合 (404 project 等) は prep-extractor Phase B に戻る、認証 / 権限 / 容量 / Cloud 障害は escalation。
 
 ## How to invoke
 
@@ -103,15 +94,7 @@ run 1 件ごとに [scripts/publish_manifest.py update-run](../../../scripts/pub
 
 ## 認証
 
-`.env` から `SERVER` / `SITE_NAME` を読み、OAuth 2.0 (Authorization Code + PKCE) のブラウザサインインで access_token を取得する。Repo 直下 [scripts/tableau_auth.py](../../../scripts/tableau_auth.py) を共通モジュール (`signed_in_server()` context manager) として import。
-
-```
-SERVER=https://<your-pod>.online.tableau.com
-SITE_NAME=mysite
-OAUTH_CALLBACK_PORT=8765   # optional, default 8765
-```
-
-詳細: [references/authentication.md](references/authentication.md)
+`.env` の `SERVER` / `SITE_NAME` を読み、OAuth 2.0 (Authorization Code + PKCE) のブラウザサインインで access_token を取得する。Repo 直下 [scripts/tableau_auth.py](../../../scripts/tableau_auth.py) の `signed_in_server()` context manager を import。.env の項目と運用の詳細は [references/authentication.md](references/authentication.md)。
 
 ## 実行ポリシー (最重要)
 
@@ -121,7 +104,7 @@ OAUTH_CALLBACK_PORT=8765   # optional, default 8765
 4. **自動ロールバックはしない** — Tableau Cloud のバージョン履歴から手動で戻す方が監査ログがクリーン
 5. **エラーは握り潰さない** — finishCode / notes / errorCode をそのまま会話に返す
 
-詳細: [references/autonomous-execution-policy.md](references/autonomous-execution-policy.md), [references/autonomous-recovery.md](references/autonomous-recovery.md)
+詳細: [references/autonomous-recovery.md](references/autonomous-recovery.md)
 
 ## Scripts
 
@@ -141,9 +124,8 @@ Cloud 側の **構造読み取り** (`deploy-context.md` 生成) は [prep-extra
 
 ## 設計原則
 
-- production への副作用は session intake で合意済みの前提で自律実行
-- 失敗時は autonomous-recovery のマッピングでリトライ、回復不能なら escalation
-- 自動ロールバックはしない (監査ログ保全)
+実行ポリシー (上節) に加えて:
+
 - 認証情報は `.env` 経由 (コミット禁止、`.gitignore` 済み)
 - jobs.get / projects.get の結果はキャッシュせず、毎回サーバーから取得
 - スクリプトは単独で動くようにする (Skill 経由でも、ユーザーがコマンドラインから直接呼んでも)

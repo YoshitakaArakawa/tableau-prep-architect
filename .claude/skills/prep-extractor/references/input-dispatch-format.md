@@ -1,12 +1,17 @@
 ---
 purpose: prep-extractor Phase B が出力する input-dispatch-mech.json の JSON スキーマ仕様。architect が consume する mechanical findings のフォーマット
-fetched_at: 2026-05-24
-note: トップレベル構造と per-Input record のスキーマ、kind 別の追加フィールド (pds / vconn / direct_db / extract)、architect の consume パターンを規定する
+note: トップレベル構造と per-Input record のスキーマ、kind 別の追加フィールド (pds / vconn / direct_db / extract) を規定する。policy 判定ルールは decomposition-plan-format.md に委譲
 ---
 
 # input-dispatch-format
 
 `work/<session>/reports/input-dispatch-mech.json` の JSON スキーマ。Phase B の `dispatch_inputs.py` が生成、prep-architect が読む。**ユーザー確認のための markdown ではない** — 単なる mechanical findings の永続化。
+
+## 目次
+
+- トップレベル構造
+- per-Input record (共通フィールド / fields[] / kind 別固有フィールド: pds・vconn・direct_db・extract)
+- consume 側の責務
 
 ## トップレベル構造
 
@@ -27,7 +32,7 @@ note: トップレベル構造と per-Input record のスキーマ、kind 別の
 }
 ```
 
-`unknown` が 1 以上のとき dispatch_inputs.py は exit 2 で停止するため、本ファイルが書き出される時点で `kind_counts.unknown == 0` が保証される ([cloud-context-procedure.md §unknown 検出時の挙動](cloud-context-procedure.md))。
+`unknown` が 1 以上のとき dispatch_inputs.py は exit 2 で停止するため、本ファイルが書き出される時点で `kind_counts.unknown == 0` が保証される ([deploy-context-procedure.md §unknown 検出時の挙動](deploy-context-procedure.md))。
 
 ## per-Input record (`inputs[]` の各要素)
 
@@ -117,26 +122,6 @@ architect は `connection_class` を見て provisioning 案を組み立てる (s
 
 extract Input (local .hyper 等) は本リポでは実検証ゼロのため future schema。発生時は `extract` という kind ラベルのみ付与、追加情報は将来拡張で対応。architect は `needs_provisioning` として扱う。
 
-## architect の consume パターン
+## consume 側の責務
 
-```python
-# concept: 実装は architect の decompose 内
-mech = json.load(open("input-dispatch-mech.json"))
-for inp in mech["inputs"]:
-    kind = inp["kind"]
-    if kind == "pds" and inp["pds"]["resolution"]["status"] == "resolved":
-        # default: passthrough (PDS 直参照、stg 作らない)
-        # exception: PDS 名から raw データ匂い → augment 候補として Stop 2 で確認
-        ...
-    elif kind == "vconn":
-        # default: augment (Materialization=live_pds で stg PDS 新規 publish)
-        # augmenter_columns_hint と fields[] から Rename proposals 表を組み立て
-        ...
-    elif kind in ("direct_db", "extract"):
-        # needs_provisioning
-        # provisioning 案を `## Input provisioning required` セクションに追加
-        # build 時に当該 stg は skip + manifest warning
-        ...
-```
-
-詳細な policy / rename / provisioning ルールは [prep-architect/references/review-checkpoints.md](../../prep-architect/references/review-checkpoints.md) の Tier 1 / Tier 2 を参照。
+kind → policy の判定 (pds resolved → passthrough / vconn → augment + live_pds / direct_db・extract → needs_provisioning) と rename / provisioning の組み立てルールは architect 側の正典 [decomposition-plan-format.md §Input dispatch と stg materialization](../../../../references/decomposition-plan-format.md) に従う。本ファイルはスキーマのみを規定する。

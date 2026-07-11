@@ -1,6 +1,5 @@
 ---
 purpose: prep-deployer の preflight フェーズが pending segments と dbt 3 レイヤを idempotent に一括作成するアルゴリズム
-fetched_at: 2026-05-17
 note: deploy-context.md frontmatter の消費、pending segments の順次作成、dbt 3 レイヤの一括作成、idempotent 性を規定。承認は step 0 の target path 指定で兼ねる
 ---
 
@@ -8,7 +7,7 @@ note: deploy-context.md frontmatter の消費、pending segments の順次作成
 
 `prep-deployer` の **Preflight フェーズ** の具体手順。[prep-extractor](../../prep-extractor/SKILL.md) Phase B が生成した `deploy-context.md` を読み、target までの pending セグメントと dbt 3 レイヤ (`stg / intermediate / marts`) を順に idempotent 作成する。
 
-承認方針: **追加プロンプトは出さない**。session intake (CLAUDE.md step 0) で target path がユーザーから明示されていることが preflight 全体の合意。スクリプトも非対話。承認ポリシー全体は [autonomous-execution-policy.md](autonomous-execution-policy.md) を参照 (preflight だけでなく publish / run も同じ「session intake で合意を取り切る」モデル)。
+承認方針: **追加プロンプトは出さない**。session intake で target path が明示されたことが合意 ([autonomous-recovery.md §実行ポリシー](autonomous-recovery.md))。スクリプトも非対話。
 
 階層モデルの全体像は [../../../../references/project-hierarchy.md](../../../../references/project-hierarchy.md) を参照。
 
@@ -41,13 +40,7 @@ if missing_ds:
 
 すべての pending を作り切る前提（ユーザーが target path を指示した時点で全段の作成が同意されている）。`create_project.py` / `create_projects.py` は idempotent なので、すでに存在する project は `[skip]` で安全。
 
-## なぜ flows/ と datasources/ を分けるか
-
-[../../../../references/project-hierarchy.md](../../../../references/project-hierarchy.md) で詳述。要点:
-
-- ETL 担当 (flows 側 Editor) と BI 担当 (datasources 側 Editor) の権限分離
-- Cloud UI 上で flow と DS が混ざらず一覧性が向上
-- 1 つの flow の中で「.tfl 本体の publish 先」と「PDS の publish 先」が別プロジェクト (Tableau REST API の `FlowItem.project_id` と PublishExtract ノード内 `projectLuid` が独立で支持)
+flows/ と datasources/ を分ける理由 (権限分離・一覧性・publish 先の独立) は [../../../../references/project-hierarchy.md](../../../../references/project-hierarchy.md) を参照。
 
 ## エラー時の挙動
 

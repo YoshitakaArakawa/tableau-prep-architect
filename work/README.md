@@ -33,7 +33,28 @@ work/
 
 - 日付は **作業開始日**
 - 作業内容は短く（snake_case / kebab-case どちらでも可、可読性優先）
-- 各サブフォルダの責務は [CLAUDE.md §work/ ディレクトリ規約](../CLAUDE.md#work-ディレクトリ規約) を参照
+- Skill ごとにフォルダを切るのではなく、**ファイルの「役割」で分離** する (Skill が増えても直下が膨張しない)
+
+## サブフォルダの責務
+
+| サブフォルダ | 入れるもの | 入れないもの |
+|---|---|---|
+| `reports/` | prep-extractor の `flow-summary.md` / `deploy-context.md`、prep-architect の `analysis-*.md` / `decomposition-plan-*.md`、prep-builder/deployer の `publish-manifest.json`、prep-output-comparator の `comparison-report.md` / `pairs.json` | スクリプト、.tfl |
+| `flows/` | prep-builder の `staging/*.tfl` / `intermediate/*.tfl` / `marts/*.tfl` | レポート、試行錯誤の .tfl |
+| `scripts/` | **公式の再生成スクリプト** (例: `build_tfls.py` — このセッションの .tfl 群を再ビルドできるもの)。冪等で再実行可能 | 1 回限りの修正試行・実験 |
+| `scratch/` | 試行錯誤・使い捨ての py / メモ (例: `patch_target_path.py`, 検証用 `regression_test_*.py`) | 後段の Skill が依存するスクリプト |
+
+迷ったら: 機械生成 MD/JSON → `reports/` / .tfl 成果物 → `flows/` / 再ビルド時に再実行する公式 → `scripts/` / その他 → `scratch/`。
+
+## 実行時間の事後計測 tip
+
+セッションの phase 別所要時間が知りたくなったら、`work/<session>/` 配下のファイル mtime を時系列で並べると粗い timeline を復元できる。各 phase は特徴的なファイルを残す (`flow-summary.md` = Phase A 完了 / `deploy-context.md` = Phase B 完了 / `analysis-*.md`・`decomposition-plan-*.md` = architect / `flows/*/*.tfl` = builder / `comparison-report.md` = comparator)。PowerShell:
+
+```powershell
+Get-ChildItem work/<session> -Recurse -File | Sort-Object LastWriteTime | Select-Object LastWriteTime,FullName
+```
+
+subagent fork の内部時間が見えないとき特に有用 (fork 内の breakdown は [references/skill-timing-contract.md](../references/skill-timing-contract.md) の Timing ブロックが一次情報)。
 
 ## 昇格ルール
 

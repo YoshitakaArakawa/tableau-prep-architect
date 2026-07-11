@@ -1,7 +1,6 @@
 ---
 purpose: intermediate 層の分解戦略（1 entity 1 .tfl 原則と例外条件）
-fetched_at: 2026-05-17
-note: 1 SuperTransform を複数 .tfl に分けるか／step 単位で連鎖分割するかの判断基準と命名・注意点
+note: 1 SuperTransform を複数 .tfl に分けるか／step 単位で連鎖分割するかの判断基準と命名・注意点。Union ノード保持の hard rule (Table Names 暗黙列) の正典もここ
 ---
 
 # intermediate-decomposition

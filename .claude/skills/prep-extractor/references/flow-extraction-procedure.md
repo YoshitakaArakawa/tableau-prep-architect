@@ -1,6 +1,9 @@
-# Phase A 実装手順
+---
+purpose: prep-extractor Phase A (flow extraction) の 4 ステップ実装手順
+note: 入力展開 / gen_flow_summary.py 実行 / 生成結果レビュー / 完了報告と、エラーハンドリング・サーバー DL 補助・制約を規定
+---
 
-Phase A (flow extraction) の 4 ステップ実装ガイド。SKILL.md からは 1 行サマリでしか参照されないため、本ファイルに詳細を集約する。
+# Phase A 実装手順
 
 ## Step 1: 入力ファイルの展開
 
@@ -71,14 +74,7 @@ python .claude/skills/prep-extractor/scripts/download_flow.py \
     --output work/<date>/source.tflx
 ```
 
-認証は Repo 直下 [scripts/tableau_auth.py](../../../../scripts/tableau_auth.py) が `.env` を読む。
-
-## URL ID 解決について
-
-`https://<your-pod>.online.tableau.com/#/site/<contentUrl>/projects/<id>` の数値 ID は **vizportalUrlId** で、Tableau REST API の標準エンドポイント (`GET /sites/{site-id}/projects`) には **返らない**。よって `1117306` のような数値から LUID への直接マップは不可。代替手段:
-
-- ユーザーに project name または `Parent/Child` path を聞く（本フェーズの基本動作）
-- Metadata API (GraphQL) も `vizportalUrlId` を返さないため逆引き不可（検証済み）
+認証は Repo 直下 [scripts/tableau_auth.py](../../../../scripts/tableau_auth.py) が `.env` を読む。URL の数値 ID (vizportalUrlId) から LUID への逆引きは不可 — 詳細は [deploy-context-procedure.md §URL ID 解決について](deploy-context-procedure.md#url-id-解決について)。
 
 ## 制約 (Phase A)
 

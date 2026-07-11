@@ -1,6 +1,5 @@
 ---
 purpose: prep-pds-augmenter (augment_pds.py) の失敗種別と対処の一覧。caller が exit code と RESULT_JSON / stderr から原因を分類するための reference
-fetched_at: 2026-05-24
 note: 認証 / 権限 / Cloud 障害以外は recoverable - spec を直すか入力メタを直すかで再実行可能
 ---
 

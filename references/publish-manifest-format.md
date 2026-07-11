@@ -1,6 +1,5 @@
 ---
 purpose: publish-manifest.json (セッション manifest) のスキーマ仕様
-fetched_at: 2026-05-19
 note: prep-builder が init し、prep-deployer が publish/run/resolve-luids で更新し、prep-output-comparator が読み取る。複数 Skill 共有の形式契約のためリポ直下に置く
 ---
 
@@ -176,22 +175,7 @@ CLI は repo 直下 [scripts/publish_manifest.py](../scripts/publish_manifest.py
 
 ## decomposition-plan との接続
 
-prep-architect の decomposition-plan-<flow>.md に **必須セクション** `## Output mapping (original → decomposed)` を追加する (詳細は [decomposition-plan-format.md](decomposition-plan-format.md))。本セクションの Markdown 表が `decomposed_flows[].source_original_output_name` の source of truth。
-
-形式:
-
-```markdown
-## Output mapping (original → decomposed)
-
-| Original output PDS | Decomposed flow | Decomposed output PDS |
-|---|---|---|
-| stockmarket_transaction_prepped | fct_transactions_summary | fct_transactions_summary |
-| stockmarket_transaction_detailed_prepped | fct_transactions_matched | fct_transactions_matched |
-```
-
-- 元 PDS が複数の decomposed flow に分かれる場合は 1 元 PDS = 複数行で表現
-- 元 PDS と対応関係が無い flow (分解で新規生成された stg / 中間 PDS) は本表に出さない (`source_original_output_name = null` で manifest に登録される)
-- 表の `Decomposed output PDS` は publish 後の PDS 名で、`Decomposed flow` の flow 名と一致するのが本リポ規約だが、別名にしたい場合は両方記載 (`outputs[].name` に転記される)
+prep-architect の decomposition-plan-<flow>.md の必須セクション `## Output mapping (original → decomposed)` の Markdown 表が `decomposed_flows[].source_original_output_name` の source of truth。表の書式・記載ルールは [decomposition-plan-format.md](decomposition-plan-format.md) §Output mapping を参照。manifest 側の挙動: 表に現れない flow (分解で新規生成された stg / 中間 PDS) は `source_original_output_name = null` で登録され、表の `Decomposed output PDS` 列は `outputs[].name` に転記される。
 
 ## 後方互換性
 

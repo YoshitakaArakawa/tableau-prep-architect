@@ -1,3 +1,8 @@
+---
+purpose: fork Skill が主会話に返す Timing ブロックの書式規約
+note: フォーマット、Skill 別 breakdown 推奨項目、実装ガイドを規定
+---
+
 # Skill Timing Contract
 
 `context: fork` で動く Skill は内部時間が主会話から見えないため、各 Skill の **主会話への戻り値メッセージの末尾** に `## Timing` ブロックを必ず含める。fork 内部のどの phase で時間が溶けたかを観測できるようにするため。
@@ -27,7 +32,7 @@
 | Skill | breakdown |
 |---|---|
 | prep-extractor Phase A | input load (.tfl 展開) / topology 抽出 / actions inventory / Mermaid 生成 / write |
-| prep-extractor Phase B | project tree fetch / parent walk + naming scan / write |
+| prep-extractor Phase B | project tree fetch (1-pass) / dispatch classify (1-pass) / also-scan rescan / dispatch classify (final) / write |
 | prep-architect | input read (flow-summary etc.) / analyze 本体 / decompose 本体 / self-check / write |
 | prep-builder | plan parse / source flow load / per-tfl build (8 .tfl の合計) / manifest init / write |
 | prep-output-comparator | pair resolve / metadata API (N 件) / query-datasource (N 件) / flag check / write |

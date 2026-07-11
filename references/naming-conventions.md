@@ -1,6 +1,5 @@
 ---
 purpose: 新規 .tfl ファイル・ノード・列・Published DS の命名規約
-fetched_at: 2026-05-17
 note: レイヤ別ファイル名規約 (stg_<source>__<entity> / int_<entity>_<verb> / fct_/dim_/rpt_)、ノード名・列名・Published DS 名のルールを規定
 ---
 
@@ -69,9 +68,7 @@ rpt_<scope>.tfl        # fct × dim を Prep 内で JOIN 済みの OBT (one big 
 
 `<entity>` は dbt 慣例に従い **複数形** 推奨（`fct_orders`, `dim_customers`）。`<scope>` は分析タスク名（例: `rpt_sales_with_customer`, `rpt_returns_by_region`）。
 
-**なぜ rpt_ が必要か**: Tableau Workbook の Data Model では **Published Data Source 同士の Relationship / Join は不可** で、結合できるのは Data Blending のみ（非加法集計に制約あり）。複数 dim を組合せた本格分析が必要な場合は、Prep 内で物理 JOIN した結合済み Published DS を rpt_*.tfl として用意するのが現実解。
-
-軽い数値の重ね合わせで足りるケースは fct_ / dim_ 直読 + Data Blending で済ませる。事前集計の OBT は粒度を明示して `agg_<entity>_<grain>`（例: `agg_revenue_monthly`）でも可。
+rpt_ / agg_ を作る判断基準と理由 (Workbook の Data Blending 制約) は [layer-responsibilities.md](layer-responsibilities.md#fct--dim--rpt--agg-の役割分担) を参照。事前集計の OBT は粒度を明示して `agg_<entity>_<grain>`（例: `agg_revenue_monthly`）と命名する。
 
 ### 区切り文字サマリ
 
@@ -82,7 +79,7 @@ rpt_<scope>.tfl        # fct × dim を Prep 内で JOIN 済みの OBT (one big 
 
 ## Published Data Source 名
 
-Prep フローが publish する Hyper / DS の名前は **ファイル名と一致** させる。
+Prep フローが publish する Published DS の名前は **.tfl ファイル名と一致** (拡張子なし) を default 規約とする。
 
 | .tfl ファイル | Published DS 名 |
 |---|---|
@@ -90,7 +87,8 @@ Prep フローが publish する Hyper / DS の名前は **ファイル名と一
 | `fct_sales.tfl` | `fct_sales` |
 | `dim_customers.tfl` | `dim_customers` |
 
-`_published` サフィックスを付ける／付けないは組織選択。付けると「これは Prep が publish したもの」と明示できるが、冗長。MVP は付けない方針を推奨。
+- `_published` サフィックスを付ける／付けないは組織選択。付けると「これは Prep が publish したもの」と明示できるが冗長。MVP は付けない方針を推奨
+- 例外: 同一 .tfl 内で複数 PublishExtract ノードを持ち別 PDS 名にしたい場合は decomposition-plan の Output mapping で別名を明示 ([decomposition-plan-format.md](decomposition-plan-format.md))
 
 ## ノード名（.tfl 内部の Tableau Prep UI 表示名）
 
@@ -111,18 +109,6 @@ Prep フローが publish する Hyper / DS の名前は **ファイル名と一
 staging: order_id, customer_id, total_amount
 marts:   Order ID, Customer ID, Total Amount
 ```
-
-## Published DS 名
-
-各 .tfl の Output (Published DS) 名は **.tfl 名と同じ** (拡張子なし) を default 規約とする:
-
-```
-stg_orders.tfl       → Published DS: stg_orders
-int_orders_enriched.tfl → Published DS: int_orders_enriched
-fct_sales.tfl        → Published DS: fct_sales
-```
-
-例外: 同一 .tfl 内で複数 PublishExtract ノードを持ち別 PDS 名にしたい場合は decomposition-plan の Output mapping で別名を明示 ([decomposition-plan-format.md](decomposition-plan-format.md))。
 
 ## アンチパターン
 

@@ -1,14 +1,34 @@
 ---
-purpose: prep-deployer の自律リトライループ仕様。publish / run 失敗時の symptom→root cause→修正アクション マッピングと escalation 境界を規定
-fetched_at: 2026-05-17
-note: AI Agent が承認なしで自律実行する前提で、失敗時の診断・修正・再実行ループを規定する。リトライ上限、loop 検知、escalation 条件、回復不能エラーの一覧を含む
+purpose: prep-deployer の自律実行ポリシーとリトライループ仕様。承認なし実行の根拠、publish / run 失敗時の symptom→root cause→修正アクション マッピング、escalation 境界を規定
+note: 実行ポリシー (なぜ承認を取らないか) と回復ループ (失敗をどう分類しどこまで自動修正するか) を 1 ファイルに集約。リトライ上限、loop 検知、escalation 条件、回復不能エラーの一覧を含む
 ---
 
 # autonomous-recovery
 
-`prep-deployer` の **自律リトライループ** の具体仕様。publish / run / preflight が失敗したとき、AI Agent がどう原因を判定し、どこまで自動で修正・再試行し、どこから人間に escalation するかを規定する。
+`prep-deployer` の **実行ポリシーと自律リトライループ** の仕様。publish / run / preflight を承認なしで実行する根拠と、失敗したとき AI Agent がどう原因を判定し、どこまで自動で修正・再試行し、どこから人間に escalation するかを規定する。
 
-承認方針は [autonomous-execution-policy.md](autonomous-execution-policy.md) を参照。本ファイルは「承認は session intake で済んでいる」前提で、**失敗→回復ループ** の挙動だけを規定する。
+## 目次
+
+- 実行ポリシー: 承認なしの自律実行
+- ループの基本構造 / リトライ上限
+- Publish 失敗の分類と修正アクション
+- Run 失敗 (finishCode=1) の分類と修正アクション
+- Preflight 失敗の扱い
+- escalation 対象 (回復不能)
+- ロールバック方針
+- レイヤ間順序の扱い
+
+## 実行ポリシー: 承認なしの自律実行
+
+publish / run / preflight は承認プロンプトを出さずに実行する (`--yes` は AI Agent がデフォルト付与、スクリプト側の対話プロンプトは撤廃済み)。根拠:
+
+- **Session intake (step 0)** で goal (Q2) と target path (Q4) をユーザーから明示で取っている。「Cloud に publish & run まで」を選んだ時点で target 配下への書き込みは合意済み
+- target は `99_Sandbox/...` のような **隔離されたサブツリー** で、誤って組織全体に影響を与える経路がない
+- レイヤごとに承認を取り直しても、人間は中間 finishCode をジャッジできない (ノイズになる)
+
+承認を省くことは副作用の軽視ではない: publish は既存 flow / Published DS の上書き・新規作成、run は入力ソースへの負荷 (仮想接続経由でも本番 DB)・出力 PDS / テーブルの上書き・Extract 容量消費を伴う。target が安全領域であることは session intake の時点でユーザーが担保する。
+
+例外の扱い: top-level プロジェクト作成 (preflight で `existing_prefix` が null) は WARNING を stderr に出すが処理は止めない (governance は事後監査)。CI / cron の無人実行は本リポのスコープ外 — `signed_in_server()` は OAuth ブラウザサインイン前提で CI では使えないため、必要なら PAT ベースの簡易スクリプトを別途切り出し、Required reviewer 等で session intake 相当の合意ゲートを置く ([authentication.md](authentication.md))。
 
 ## ループの基本構造
 
@@ -37,7 +57,7 @@ publish or run 実行
 
 | Tableau errorCode | symptom | root cause | 修正アクション | 担当 |
 |---|---|---|---|---|
-| `280003` | HTTP 400 "Problem reading the provided Flow file" | (a) maestroMetadata 欠落 / (b) Input ノードに connection 登録なし (孤立 connectionId) / (c) 複数の重複 Tableau Server connection entry (KB 005232681) / (d) LoadSqlProxy / dataConnection の `dbname` 欠落 / (e) LoadSqlProxy 必須デフォルトフィールド欠落 | .tfl を **再 build** (`flow_io.add_pds_input` で connection 一括登録、`aux_entries=` で maestroMetadata 同梱) | prep-builder |
+| `280003` | HTTP 400 "Problem reading the provided Flow file" | (a) maestroMetadata 欠落 / (b) Input ノードに connection 登録なし (孤立 connectionId) / (c) 複数の重複 Tableau Server connection entry (KB 005232681) / (d) LoadSqlProxy / dataConnection の `dbname` 欠落 / (e) LoadSqlProxy 必須デフォルトフィールド欠落 | .tfl を **再 build**。sub-cause 別: (a) `aux_entries=` 渡し忘れを確認 / (b) `flow_io.add_pds_input` で connection 一括登録 / (c) `add_pds_input` は dedup する — 自前生成を疑う / (d) `add_pds_input` は dbname=None でも placeholder を自動挿入する / (e) `make_load_sql_proxy_node` のデフォルトに含まれる — 自前構築なら要追加 | prep-builder |
 | `409` | name conflict | 同名 flow が CreateNew で既存 | `--mode Overwrite` で再 publish | prep-deployer |
 | `429` | rate limit | API リクエスト過多 | exponential backoff (1s → 2s → 4s) で同じ操作を再試行 | prep-deployer |
 | `5xx` | server error / capacity | Cloud 側障害 or サイト容量上限 | **escalation** (AI では回復不可) | — |
@@ -118,11 +138,3 @@ for layer in [stg, intermediate, marts]:
 ```
 
 レイヤ間に人間プロンプトは挟まないが、**上流レイヤで escalation が出たら下流に進まない** のは堅持。理由: 下流 flow の Input が上流 PDS を参照しているので、上流が壊れたまま下流を回すと finishCode=1 の連鎖になるだけ。
-
-## 関連ドキュメント
-
-- 承認ポリシー全体像: [autonomous-execution-policy.md](autonomous-execution-policy.md)
-- publish の具体手順: [publish-recipe.md](publish-recipe.md)
-- run / polling の具体手順: [run-and-poll.md](run-and-poll.md)
-- preflight アルゴリズム: [preflight-recipe.md](preflight-recipe.md)
-- 認証情報運用: [authentication.md](authentication.md)

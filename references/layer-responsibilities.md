@@ -1,6 +1,5 @@
 ---
 purpose: dbt 流 staging / intermediate / marts 各レイヤの責務定義と判定基準
-fetched_at: 2026-05-17
 note: 各レイヤの「やる/やらない」、レイヤ判定の決定木、actions レベル分析の指針を含む
 ---
 
@@ -39,7 +38,7 @@ stg は **column-level 操作だけ** に閉じる。row-level 操作 (フィル
 | ピボット / アンピボット | — |
 | Python / R ステップ | — |
 
-**目安**: intermediate は **原則 1 entity 1 .tfl**（30+ ノードまで許容）。連鎖分割は例外扱い — 詳細は [intermediate-decomposition.md](intermediate-decomposition.md) を参照。
+**目安**: intermediate は **原則 1 entity 1 .tfl**（30+ ノードまで許容）。連鎖分割は例外扱い — 詳細は [intermediate-decomposition.md](../.claude/skills/prep-architect/references/intermediate-decomposition.md) を参照。
 
 ### marts (`fct_*` / `dim_*` / `rpt_*`)
 
@@ -95,7 +94,7 @@ dbt の「1 モデル 1 SELECT」を Prep に転用したもの：
 
 ## intermediate 分解戦略
 
-連鎖分割パターン・分割の目安・actions 単位分割の判断基準は [intermediate-decomposition.md](intermediate-decomposition.md) を参照。本ファイルは「どのレイヤに属するか」、intermediate-decomposition.md は「intermediate 内をどう分けるか」の責務分担。
+連鎖分割パターン・分割の目安・actions 単位分割の判断基準は [intermediate-decomposition.md](../.claude/skills/prep-architect/references/intermediate-decomposition.md) を参照。本ファイルは「どのレイヤに属するか」、intermediate-decomposition.md は「intermediate 内をどう分けるか」の責務分担。
 
 ## ⭐ SuperTransform の actions レベル分析
 
@@ -121,8 +120,6 @@ Clean ステップ 1 つが：
 | GroupValues（ビジネスロジック由来） | **int** |
 | 複雑な ReplaceValue（業務マッピング） | **int** |
 | UI 向け列リネーム・最終並べ替え | **mart** |
-
-**stg = column 属性編集のみ** という制約は augmenter (rename / cast / hide) の表現可能範囲に揃えた結果。row 単位の操作は全部 int 以降。
 
 → **1 つの SuperTransform に複数レイヤに跨る actions が混在するケースが頻繁** にある（stg 相当の Rename と int 相当の AddColumn が同居）。
 
@@ -160,14 +157,7 @@ marts
                                      (fct_sales を月次粒度で事前集計、BI で繰り返し使う)
 ```
 
-設計の意図:
-
-- **fct_ / dim_** は **再利用可能な素材**。`dim_customer` を `fct_sales` / `fct_orders` / `fct_returns` から共有できる
-- **rpt_** は **BI 用の完成品**。Workbook では Published DS 同士の Relationship/Join が使えないため、複数 dim と結合した状態が必要な分析タスクごとに rpt を物理化する
-- **agg_** は **事前集計の物理化**。同じ重い集計（月次売上 / 顧客別 LTV 等）を BI で何度もやる場合、**fct から派生** させて agg として publish する。粒度は名前に明示（`agg_revenue_monthly` 等）、agg は raw source から独立に組まず、**atomic な fct から再計算可能** に保つ
-- **マテリアライズの粒度を分析タスク単位に揃える**: 必要な rpt / agg だけ作るので、巨大な汎用 OBT を作って全分析を 1 つの DS に押し込む形は避ける
-
-軽い分析（メトリック 1〜2 個を別 dim から重ねるだけ等）は fct_/dim_ 直読 + Data Blending で済ませてよい。rpt_ は「Data Blending では足りない / 複数 dim の組合せ的分析」の場合に作る。agg_ は「同じ重い集計を何度も BI でする」場合に作る。
+設計の意図: fct_ / dim_ は再利用素材 (`dim_customer` を複数 fct で共有)。rpt_ は「Data Blending では足りない複数 dim の組合せ分析」の場合にだけ作る BI 用完成品 (理由は上の「なぜ rpt_ を作るのか」)。agg_ は「同じ重い集計を BI で繰り返す」場合の事前集計で、粒度を名前に明示し **atomic な fct から再計算可能** に保つ。マテリアライズは分析タスク単位に揃え、巨大な汎用 OBT へ全分析を押し込まない。軽い分析は fct_/dim_ 直読 + Data Blending で済ませてよい。
 
 ## 参考
 

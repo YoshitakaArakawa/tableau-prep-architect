@@ -1,12 +1,18 @@
 ---
 purpose: publish 済み flow の実行とジョブステータス polling の手順
-fetched_at: 2026-05-17
-note: Run 開始 / status 取得 / finishCode 判定 / リトライ / タイムアウト方針を規定。REST API エンドポイント仕様も含む
+note: Run 開始 / status 取得 / finishCode 判定 / 並列実行の排他制約 / タイムアウト方針を規定。REST API エンドポイント仕様も含む。失敗分類は autonomous-recovery.md に委譲
 ---
 
 # run-and-poll
 
 publish 済みの Prep flow を REST API で実行し、ジョブステータスを polling で取得して成功/失敗を判定するワークフロー。
+
+## 目次
+
+- REST API エンドポイント / tableauserverclient での等価コード / `finishCode` の意味
+- スクリプトの使い方 / Polling 設計 / 失敗時の `notes` フィールド
+- 並列実行と排他 (同一 OAuth session の制約と run_layer.py)
+- run 後の manifest 更新 / 全レイヤ完走後の resolve-luids / REST API バージョン
 
 ## REST API エンドポイント
 
@@ -92,7 +98,7 @@ python run_flow.py --flow-id <luid> --no-wait
 python get_job_status.py --job-id <jobId>   # 後で個別に確認
 ```
 
-承認は session intake (CLAUDE.md step 0) で済んでいる前提 ([autonomous-execution-policy.md](autonomous-execution-policy.md))。CI でも同じスクリプトをそのまま使う。
+承認は session intake (CLAUDE.md step 0) で済んでいる前提 ([autonomous-recovery.md §実行ポリシー](autonomous-recovery.md))。
 
 ## Polling 設計
 
@@ -113,17 +119,7 @@ notes: Output to Published Data Source 'fct_sales' failed: insufficient permissi
 notes: Extract refresh failed: max extract size exceeded
 ```
 
-ただし notes は人間向け文字列で **構造化されていない**。CI で機械的にエラーパターンを判定したい場合は、`get_job_status.py` の出力をログに残し、後段でテキスト解析する。
-
-## 典型的なエラーパターン
-
-| ケース | 原因 | 対処 |
-|---|---|---|
-| `finishCode=1`, notes に "authentication" | 接続情報の embed が失効 / 仮想接続経由なのに権限不足 | サービスアカウントの権限 / 仮想接続の DB 認証情報を確認 |
-| `finishCode=1`, notes に "permission" | サービスアカウントが出力先プロジェクトに書き込めない | プロジェクト権限を Editor に |
-| `finishCode=1`, notes が空 | サーバー側内部エラー | Tableau Cloud のステータスページ確認、サポート問い合わせ |
-| `finishCode=2`（Cancelled） | 他のユーザー / 管理者が手動でキャンセル | ログで誰がキャンセルしたか確認 |
-| **timeout** | flow が想定より長い | `--timeout` を増やすか、flow を分割（dbt 風に細分化） |
+ただし notes は人間向け文字列で **構造化されていない**。notes パターン → root cause → 修正アクションの分類表は [autonomous-recovery.md の Run 失敗分類](autonomous-recovery.md) に集約。本ファイル固有の注意は **client 側 timeout** のみ: flow が想定より長い場合は `--timeout` を増やすか flow を分割する (timeout はジョブ失敗ではなく観測打ち切り)。
 
 ## 並列実行と排他
 

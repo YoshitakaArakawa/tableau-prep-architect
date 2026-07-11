@@ -1,6 +1,5 @@
 ---
 purpose: prep-extractor が flow.json から生成する flow-summary.md の書式仕様
-fetched_at: 2026-05-17
 note: トップレベル構造、Meta / Topology / Dependency DAG / SuperTransform actions inventory / Warnings の各セクションの厳密書式を規定
 ---
 
@@ -8,14 +7,11 @@ note: トップレベル構造、Meta / Topology / Dependency DAG / SuperTransfo
 
 **`prep-extractor` Skill** の出力（`flow-summary.md`）の書式仕様。本 Skill が flow.json を読んでこの形式に変換する。後段 (`prep-architect` の analyze/decompose/build) は **flow.json を直接読まず、`flow-summary.md` のみ** を参照する。
 
-`prep-extractor` は `context: fork` で動くため、flow.json 読み込みのコンテキスト肥大は主会話に波及しない。
+## 目次
 
-## 設計意図
-
-- **コンパクト化**: 数百ノードのフローでも数 KB 程度の markdown に収まること
-- **構造保全**: トポロジ・依存・actions の情報を機械的に取り出せる形式
-- **可視化**: Mermaid DAG により逆参照や分岐構造を一目で確認できる
-- **未知種別のフォールバック**: 不明な nodeType / action 種別が出てもエラーにせず、警告として残す
+- トップレベル構造
+- 各セクションの書式 (Meta / Topology / Dependency DAG / SuperTransform actions inventory / Warnings)
+- 出力先 / 後続フェーズへの引き継ぎ / 実装上の指針 / 参考
 
 ## トップレベル構造
 

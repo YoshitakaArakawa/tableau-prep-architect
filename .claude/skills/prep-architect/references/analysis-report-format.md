@@ -1,12 +1,17 @@
 ---
 purpose: prep-architect の analyze フェーズが出力する分析レポートの markdown 書式仕様
-fetched_at: 2026-05-17
 note: レポートのトップレベル構造、必須セクション、各セクションの記述ルールを規定
 ---
 
 # analysis-report-format
 
 **analyze フェーズ**の出力——分析レポートの書式と必須セクションを定義する。Skill が出力する markdown の構造を統一し、後続の **decompose フェーズ**が機械的に読めるようにする。
+
+## 目次
+
+- レポートのトップレベル構造
+- 各セクションの書式 (Meta / Steps / Inputs・Outputs / Input Compliance / Decomposition points / Notes・Warnings)
+- 巨大フローの場合 / 入力（前提） / 出力先 / decompose への引き継ぎ
 
 ## レポートのトップレベル構造
 

@@ -1,7 +1,6 @@
 ---
 purpose: prep-output-comparator が出力する comparison-report.md のフォーマット仕様
-fetched_at: 2026-05-19
-note: 本 Skill は MD 単一出力。後段消費者は人間とメインエージェント LLM。プログラマティック消費 (後段 Skill の自動連携) の必要が生じたら schema 付き JSON を再導入する余地は残す
+note: 本 Skill は MD 単一出力。後段消費者は人間とメインエージェント LLM
 ---
 
 # Report Format
@@ -97,21 +96,8 @@ dataType 不一致: なし
 
 ## フラグ一覧
 
-`comparison-report.md` のヘッダおよび各ペアの Flags 行に出現する文字列:
-
-| フラグ名 | 由来 |
-|---|---|
-| `table_names_residual` | 新側スキーマに `Table Names` で始まる列がある |
-| `dash_one_suffix_residual` | 新側スキーマに `-1` で終わる列がある |
-| `row_count_match` | 全体行数が完全一致 (append ペアでは参考値) |
-| `append_original` | caller 指定の append ペア (期間一致比較に切替済み) |
-| `row_count_match_period` | control field レンジ内カウントが完全一致 (append ペアのみ) |
-| `schema_subset` | 元のみ列が空 (= 新が元を完全包含) |
-| `schema_superset` | 新のみ列が空 (= 元が新を完全包含) |
+フラグ名と検出条件の正典は [SKILL.md §Step 4: パターンフラグ検出](../SKILL.md)。レポートではヘッダと各ペアの Flags 行にバッククォート区切りで列挙する。
 
 ## 判定基準
 
-`SKILL.md §判定基準` 参照。要約:
-
-- ペアの `verdict = pass` ⇔ schema diff が空 AND 行数一致 (通常ペア: 全体行数 / append ペア: 期間内カウント)
-- `overall_verdict = pass` ⇔ 全ペアが pass
+[SKILL.md §判定基準](../SKILL.md) 参照 (pass ⇔ schema diff 空 AND 行数一致、overall は全ペア pass)。

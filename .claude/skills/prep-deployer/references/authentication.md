@@ -1,12 +1,17 @@
 ---
 purpose: OAuth (PKCE) による Tableau REST API 認証方針と .env 運用ルール
-fetched_at: 2026-05-24
 note: 認証方式の選定理由、.env の置き場所と必須変数、OAuth フローの動作、トラブルシューティングを含む
 ---
 
 # authentication
 
-`prep-deployer` / `prep-extractor` / `prep-pds-augmenter` の認証方針と `.env` 運用ルール。Repo 直下の [../../../../scripts/tableau_auth.py](../../../../scripts/tableau_auth.py) の仕様もここに準ずる。
+`prep-deployer` / `prep-extractor` / `prep-pds-augmenter` の認証方針と `.env` 運用ルール。
+
+## 目次
+
+- なぜ OAuth (PKCE) 一択か / OAuth フローの動作概要 / session cache の運用
+- `.env` の配置 / 必須環境変数 / 動作要件 / サイトロール
+- access token の有効期限 / 複数 fork での挙動 / トラブルシューティングRepo 直下の [../../../../scripts/tableau_auth.py](../../../../scripts/tableau_auth.py) の仕様もここに準ずる。
 
 ## なぜ OAuth (PKCE) 一択か
 

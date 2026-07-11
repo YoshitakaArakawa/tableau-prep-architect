@@ -1,6 +1,6 @@
 ---
 name: prep-pds-augmenter
-description: Tableau Cloud / Server 上の Published Data Source を Calculated Field 注入と column-level transforms (rename / cast / hide) で機械的に改変・量産する Skill。extract-based (Hyper-backed) / live-connection (virtual-connection backed の既存 PDS) / vconn (既存 PDS なしで仮想接続から base .tds をゼロから組み立てて publish) の 3 種の source をサポート。download (extract/live) または synthesize (vconn) → .tds XML 編集 → publish (CreateNew default / Overwrite) → 再 DL 検証を一気通貫で実行。rename の semantics は source kind で異なる: vconn は true rename (local-name 書き換え + cols map、下流 Prep からも新名で読める)、extract/live は caption-only (BI 表示のみ、下流 Prep 消費には不十分)。Prep フローが publish した Hyper Output に派生列を足したいとき、分解元 Prep の Input が仮想接続だった場合に stg 相当の Live PDS を vconn から直接 publish したいとき (下流 Prep が読む stg はこの経路のみ)、既存 Live PDS に BI 向けの rename / cast / hide を当てたいとき、calc 込み PDS を量産したいときに起動。caller が calc 仕様 (caption / formula / datatype)、transform 仕様 (column_name / to_caption / to_datatype)、vconn-source なら列メタ (name / caption / datatype) を明示提供する前提で、formula / naming 規約 / 列スキーマの auto-detect はしない。
+description: Tableau Cloud / Server 上の Published Data Source を Calculated Field 注入と column-level transforms (rename / cast / hide) で機械的に改変・量産する Skill。source は extract (Hyper-backed) / live (既存 Live PDS) / vconn (仮想接続から base .tds をゼロ合成) の 3 種で、.tds XML 編集 → publish → 再 DL 検証を一気通貫で実行する。Prep フローが publish した Hyper Output に派生列を足したいとき、分解元 Prep の vconn Input から stg 相当の Live PDS を publish したいとき、既存 Live PDS に BI 向けの rename / cast / hide を当てたいとき、「PDS に calc を注入して」「calc 込み PDS を量産して」と言われたときに起動。calc / transform 仕様と vconn 列メタは caller が明示提供する前提で auto-detect しない。
 ---
 
 # prep-pds-augmenter
@@ -8,7 +8,7 @@ description: Tableau Cloud / Server 上の Published Data Source を Calculated 
 Tableau Cloud / Server 上の Published Data Source (PDS) を **transforms** (rename / cast / hide) と **calc 注入** で機械的に改変・量産する Skill。extract-based (Hyper) と live-connection (virtual connection backed) の既存 PDS、および「既存 PDS なしで vconn から base .tds をゼロから組み立てる」vconn ソースの 3 種を扱える。
 
 主な用途:
-- Prep flow が出力した Hyper PDS に汎用的な派生列 (利益率 / 換算金額 / 閾値フラグ) を後付けで足す (= 既存ユースケース)
+- Prep flow が出力した Hyper PDS に汎用的な派生列 (利益率 / 換算金額 / 閾値フラグ) を後付けで足す
 - **分解元 Prep の Input が仮想接続だった場合に、stg 相当の Live PDS を vconn から直接 publish** する (`source.kind: "vconn"`、既存 base PDS が不要)
 - 仮想接続経由の既存 Live PDS に対して BI 向けの rename / cast / hide を XML 編集で当てる (`source.kind: "live"`)
 - composable PDS 公開時に派生列込みの PDS を量産する編集パイプライン
@@ -36,10 +36,10 @@ Tableau Cloud / Server 上の Published Data Source (PDS) を **transforms** (re
 - 編集後の round-trip 検証 (再 DL して transform / calc が残ったか確認)
 
 含まない:
-- 既存 calc field の **編集・削除** — 注入のみ (将来拡張で考慮)
+- 既存 calc field の **編集・削除** — 注入のみ
 - 既存 column の **削除** — vconn / extract schema との整合を崩すリスクが高いので hide で suppress に留める
 - formula の auto-detect / 推論 — caller 提供必須 (沈黙 fallback 回避)
-- caption の naming 規約自動変換 (snake_case 化等) — caller が `to_caption` を 1 列ずつ明示提供。caller 側で雛形を生成するヘルパーは別 script で提供する余地あり
+- caption の naming 規約自動変換 (snake_case 化等) — caller が `to_caption` を 1 列ずつ明示提供
 - .hyper のデータ本体の変更 — XML 編集のみで派生列・型変更を表現
 - VizQL Metadata API での型 assertion — Skill 内 verify は .tds XML round-trip まで。VizQL 層の最終確認 (calc が `dataType: REAL` / `columnClass: CALCULATION` で見えているか等) は caller が `mcp__tableau__get-datasource-metadata` で別途行う前提 (AVG/SUM 値による型推定は Tableau の auto-promotion で判別不能なので使わない)
 
@@ -63,9 +63,7 @@ Tableau Cloud / Server 上の Published Data Source (PDS) を **transforms** (re
 
 ## ワークフロー
 
-spec 検証 → base .tdsx 取得 (extract/live は DL / vconn は caller 提供メタからゼロ合成) → transforms (rename / hide / cast) を順序固定で適用 → calc 注入 → publish → 再 DL で round-trip 検証 → `RESULT_JSON` emit。XML 編集の詳細順序・calc ID 採番・検証ロジックは [references/tds-calc-field-format.md](references/tds-calc-field-format.md) を参照。
-
-VizQL 層での最終確認 (cast op が本当に `dataType: REAL` で exposure されているか等) は Skill 内では行わない。caller が `mcp__tableau__get-datasource-metadata` を published_luid に対して叩いて assert する (AVG/SUM 値による型推定は Tableau の auto-promotion で判別不能なため、`dataType` を直接読む)。
+spec 検証 → base .tdsx 取得 (extract/live は DL / vconn は caller 提供メタからゼロ合成) → transforms (rename / hide / cast) を順序固定で適用 → calc 注入 → publish → 再 DL で round-trip 検証 → `RESULT_JSON` emit。ローカル成果物は revert 可能なように `original.tdsx` を必ず保管する。XML 編集の詳細順序・calc ID 採番・検証ロジックは [references/tds-calc-field-format.md](references/tds-calc-field-format.md) を参照。
 
 ## 失敗時の対処
 
@@ -87,13 +85,7 @@ caller が calc 仕様 (caption / formula / datatype)、transforms 仕様 (colum
 
 ## 認証
 
-`.env` から `SERVER` / `SITE_NAME` を読み、OAuth 2.0 (Authorization Code + PKCE) でブラウザサインインして access_token を取得。Repo 直下の `tableau_auth.py` を共通モジュール (`signed_in_server()` context manager) として import (本 Skill の script から相対 path で参照)。
-
-```
-SERVER=https://<your-pod>.online.tableau.com
-SITE_NAME=mysite
-OAUTH_CALLBACK_PORT=8765   # optional
-```
+`.env` の `SERVER` / `SITE_NAME` を読み、OAuth 2.0 (Authorization Code + PKCE) でブラウザサインイン。Repo 直下 `tableau_auth.py` の `signed_in_server()` を import。詳細は [prep-deployer/references/authentication.md](../prep-deployer/references/authentication.md)。
 
 ## Scripts
 
@@ -101,15 +93,6 @@ OAUTH_CALLBACK_PORT=8765   # optional
 |---|---|
 | `scripts/augment_pds.py` | spec を読み、DL → transforms 適用 → calc inject → publish → verify を一気通貫実行 (非対話、終了時に RESULT_JSON 行を emit) |
 
-スクリプトは単独で動く: Skill 経由でも、ユーザーが `python augment_pds.py --spec spec.json --out-dir <dir>` で直接呼んでも同じ動作。
+スクリプトは単独で動く: Skill 経由でも、ユーザーが `python augment_pds.py --spec spec.json --out-dir <dir>` で直接呼んでも同じ動作。失敗は握り潰さない (HTTP status / 検証結果をそのまま caller に返す)。
 
-## 設計原則
-
-- column 追加 (calc) と column 属性編集 (transforms: rename / hide / cast) のみ。column 削除は scope 外 (hide で suppress に留める)
-- caller が calc 仕様 / transform 仕様を明示提供する前提。Skill は formula / naming 規約を推論しない
-- CreateNew がデフォルト、Overwrite は明示指定必須 (破壊的副作用回避)
-- 編集後は必ず round-trip 検証 (再 DL して transform / calc が survive したか機械チェック)
-- 失敗は握り潰さない (HTTP status / 検証結果をそのまま caller に返す)
-- .hyper のデータ本体は触らない (XML 編集のみで派生列・型変更を表現)
-- ローカル成果物は revert 可能なように `original.tdsx` を必ず保管
-- VizQL 層の最終 assertion (cast の `dataType` 等) は Skill 内に持たず caller (Metadata API) に委譲する
+設計原則は §スコープ (含む / 含まない)・§動作モデル (副作用と承認)・§ワークフロー に集約済み — 別リストとして再掲しない。
