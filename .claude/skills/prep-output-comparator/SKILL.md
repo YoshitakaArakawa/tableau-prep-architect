@@ -23,6 +23,7 @@ allowed-tools: Read Write Bash(python *) Glob Grep
 |---|---|---|
 | `manifest_path` | ✅ | session の `publish-manifest.json` のパス (典型: `work/<yyyymmdd>_<tag>/reports/publish-manifest.json`)。prep-deployer が `resolve-luids` まで完了した状態を前提とする。形式は [../../../references/publish-manifest-format.md](../../../references/publish-manifest-format.md) |
 | `output_dir` | ✅ | レポート出力先 (典型: `work/<yyyymmdd>_<tag>/reports/`)。MD は [CLAUDE.md §work/ ディレクトリ規約](../../../CLAUDE.md#work-ディレクトリ規約) の `reports/` に集約 |
+| `append_originals` | 元フローが append 出力のときのみ | `stockmarket_data_prepped の control field は Date` のように、**元 output PDS 名 → control field caption** の対応を文章で渡す。元フローの flow-summary.md の Meta (`Incremental inputs` / `Append-mode outputs`) と decomposition-plan の parity 検証方法 (self-check 項目 16) が情報源。指定されたペアは全体行数の一致判定を**期間一致カウント**に置き換える (Step 3 変形) |
 
 ペア対応・LUID 解決はすべて manifest から取得する。caller が **個別の LUID 配列やペア順を組み立てる必要はない**。manifest の `decomposed_flows[].source_original_output_name` が原 PDS との対応の source of truth。
 
@@ -88,6 +89,14 @@ dimension 列の選び方は [references/mcp-query-recipes.md](references/mcp-qu
 
 元と新で全体行数が完全一致するかだけを判定する。元と分解後は同じソースデータから出ているので、本来一致するはず。**整数比較で完全一致のみを pass とする** (浮動小数の許容誤差は適用しない)。
 
+**Step 3 変形 — `append_originals` に指定されたペア**: 元 output が append モード (過去 run の累積) の場合、全体行数の一致は原理的に成立しない。代わりに:
+
+1. 新側で control field の `MIN`/`MAX` を取得
+2. そのレンジで両側を `QUANTITATIVE_DATE` (または NUMERICAL) RANGE フィルタしてカウント
+3. **期間内カウントの完全一致** を判定に使う。全体行数は両方とも取得してレポートに**参考値として記載** (不一致でも fail にしない)
+
+クエリの具体形は [references/mcp-query-recipes.md §期間一致カウントのレシピ](references/mcp-query-recipes.md)。レポートには使用した control field とレンジ (min/max) を必ず記載する。
+
 ### Step 4: パターンフラグ検出
 
 機械的に判定できる「観察事実」のフラグを立てる (原因分析はしない):
@@ -96,7 +105,9 @@ dimension 列の選び方は [references/mcp-query-recipes.md](references/mcp-qu
 |---|---|
 | `table_names_residual` | 新側スキーマに `Table Names` で始まる列がある (`Table Names`, `Table Names-1`, ...) |
 | `dash_one_suffix_residual` | 新側スキーマに `-1` で終わる列がある (`累計購入金額-1` 等) |
-| `row_count_match` | 全体行数が完全一致 |
+| `row_count_match` | 全体行数が完全一致 (append ペアでは参考値) |
+| `append_original` | caller が `append_originals` に指定したペア (全体行数比較は不成立、期間一致に切替済み) |
+| `row_count_match_period` | control field レンジ内のカウントが完全一致 (append ペアのみ) |
 | `schema_subset` | 新のスキーマが元のスキーマを完全に包含 (新側だけ追加列がある状態) |
 | `schema_superset` | 元のスキーマが新のスキーマを完全に包含 (新側で列が欠落) |
 
@@ -110,7 +121,9 @@ dimension 列の選び方は [references/mcp-query-recipes.md](references/mcp-qu
 
 ペアの `verdict`:
 
-- `pass` — 列差分が空 (元のみ / 新のみ / dataType 不一致がすべて空) AND 全体行数が完全一致
+- `pass` — 列差分が空 (元のみ / 新のみ / dataType 不一致がすべて空) AND 行数一致。行数一致の定義はペアの種別で切り替わる:
+  - 通常ペア: **全体行数** が完全一致
+  - `append_originals` 指定ペア: **control field レンジ内カウント** が完全一致 (全体行数は参考値、不一致でも fail にしない)
 - `fail` — 上記いずれかに違反
 
 **列比較は名前の厳密一致で行い、rename 対応付けによる救済はしない** (caller から「rename を考慮して対応付けよ」と指示されても適用しない)。分解側の規範として、元 output を引き継ぐ mart は rename-back で元列名に戻して publish される ([../../../references/decomposition-plan-format.md §Rename-back](../../../references/decomposition-plan-format.md)) ため、名前差分はそれ自体が gap であり、rename-back の取りこぼし検出こそ本 Skill の役割。

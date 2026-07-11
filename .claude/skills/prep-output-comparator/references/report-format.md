@@ -75,6 +75,17 @@ dataType 不一致: なし
 ---
 ```
 
+`append_originals` 指定ペア (元 output が append 累積) の Size diff は期間一致で書く。全体行数は参考値 (判定外) で、期間内カウントが判定対象:
+
+```markdown
+### Size diff (period-aligned: control field `Date`, range 2026-06-01 〜 2026-07-10)
+
+| 観点 | 元 | 新 | 完全一致? | 判定対象 |
+|---|---|---|---|---|
+| 期間内行数 | 112 | 112 | ✅ | ✅ |
+| 全体行数 (参考) | 26,756 | 112 | ❌ | — (append 累積のため対象外) |
+```
+
 - ペア末尾には `---` (HR) を入れる
 - セクション名は H2 `## Pair N: <original_name> → <new_name>`、サブセクションは H3
 - 各リスト項目:
@@ -92,7 +103,9 @@ dataType 不一致: なし
 |---|---|
 | `table_names_residual` | 新側スキーマに `Table Names` で始まる列がある |
 | `dash_one_suffix_residual` | 新側スキーマに `-1` で終わる列がある |
-| `row_count_match` | 全体行数が完全一致 |
+| `row_count_match` | 全体行数が完全一致 (append ペアでは参考値) |
+| `append_original` | caller 指定の append ペア (期間一致比較に切替済み) |
+| `row_count_match_period` | control field レンジ内カウントが完全一致 (append ペアのみ) |
 | `schema_subset` | 元のみ列が空 (= 新が元を完全包含) |
 | `schema_superset` | 新のみ列が空 (= 元が新を完全包含) |
 
@@ -100,5 +113,5 @@ dataType 不一致: なし
 
 `SKILL.md §判定基準` 参照。要約:
 
-- ペアの `verdict = pass` ⇔ schema diff が空 AND 全体行数が完全一致
+- ペアの `verdict = pass` ⇔ schema diff が空 AND 行数一致 (通常ペア: 全体行数 / append ペア: 期間内カウント)
 - `overall_verdict = pass` ⇔ 全ペアが pass

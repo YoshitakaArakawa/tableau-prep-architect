@@ -15,6 +15,7 @@ Tableau MCP を本 Skill から叩く際の運用上の癖と回避策。
 - query-datasource はフィールド caption (内部 ID ではない)
 - query-datasource のフィールド構造
 - 全体行数を取るレシピ
+- 期間一致カウントのレシピ (append 元出力向け)
 - Unicode フィールド名の扱い
 - レスポンスの読み方
 
@@ -101,6 +102,47 @@ dimension 列の選び方:
 - NULL を含む列を使うと NULL 行が落ちて実際より少ない値が返る
 - 元 DS と新 DS で **同じ列名** を選ぶこと (両方に存在し、両方で NULL を含まない列)
 - 適切な列が候補にない場合は `COUNTD` を全 dimension 列に掛けて多い側を採るより、caller にエラーを返す方が安全 (本 Skill は読み取り専用で、誤った行数を `pass` にして返すリスクの方が大きい)
+
+## 期間一致カウントのレシピ (append 元出力向け)
+
+元 output が append モード (過去 run の累積) の場合、全体行数は原理的に一致しない。代わりに **新側の control field の実レンジ** を取り、そのレンジ内で両側をカウントして比較する:
+
+### Step 1: 新側の MIN/MAX を取る
+
+```json
+{
+  "fields": [
+    { "fieldCaption": "Date", "function": "MIN", "fieldAlias": "min_d" },
+    { "fieldCaption": "Date", "function": "MAX", "fieldAlias": "max_d" }
+  ]
+}
+```
+
+### Step 2: 両側をそのレンジでフィルタしてカウント
+
+```json
+{
+  "fields": [
+    { "fieldCaption": "ID", "function": "COUNT", "fieldAlias": "row_count_period" }
+  ],
+  "filters": [
+    {
+      "field": { "fieldCaption": "Date" },
+      "filterType": "QUANTITATIVE_DATE",
+      "quantitativeFilterType": "RANGE",
+      "minDate": "<min_d>",
+      "maxDate": "<max_d>"
+    }
+  ]
+}
+```
+
+注意:
+
+- COUNT 対象列は全体行数レシピと同じ規準で選ぶ (両側に存在し NULL を含まない列)
+- `minDate`/`maxDate` は Step 1 の値を ISO 形式 (`YYYY-MM-DD`) で渡す
+- control field が date/datetime でない場合は `QUANTITATIVE_NUMERICAL` + `min`/`max` を使う
+- **既知の限界**: 元側は append 時点のソーススナップショットの蓄積なので、その後ソースが過去日を改訂していた場合はレンジ内でも差が出る (これは分解の欠陥ではなくソース改訂。レポートには観察事実として両カウントとレンジを記載する)
 
 ## Unicode フィールド名の扱い
 
