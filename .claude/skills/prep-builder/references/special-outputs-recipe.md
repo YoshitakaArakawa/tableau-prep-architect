@@ -28,7 +28,7 @@ verify: Rename-back 適用後の出力列集合が plan の Rename-back 表の `
 
 ## Step 3d-3: incremental refresh / append 出力の継承 (元フローが incremental の場合のみ)
 
-plan の該当 .tfl に「incremental 継承方針」がある場合 (decompose-self-check 項目 16、flow-summary.md の Meta `Incremental inputs` / `Append-mode outputs` が一次シグナル)、元フローの refresh 設定を新 .tfl に焼き込む。**append + incremental を引き継ぐ .tfl は通常「元 Output を引き継ぐ層」** (元フローが Output を 1 つ持つなら、その処理を含む層 = 多くは int または mart)。
+plan の該当 .tfl に「incremental 継承方針」がある場合 (decompose-self-check 項目 16、flow-summary.md の Meta `Incremental inputs` / `Append-mode outputs` が一次シグナル)、元フローの refresh 設定を新 .tfl に焼き込む。**継承層は既定 int** (層の判断基準は decompose-self-check 項目 16)。watermark 追跡は同一 .tfl 内の Input/Output ペアでのみ機能するので、`input_node_id` と `output_node_id` は継承層の同一 .tfl に置く。
 
 ```python
 from flow_io import set_incremental_refresh
@@ -48,4 +48,4 @@ set_incremental_refresh(
 **運用上の重要な注意 (プラン Migration order + publish-recipe に反映)**:
 
 - **append 出力は full run で重複する**。初回だけ full run で baseline を作り (新規 PDS = 現スナップショット 1 バッチ)、**以後は必ず incremental run** (`run_flow.py --incremental`)
-- 元 PDS が過去の累積履歴を持つ場合、それは現ソースに残っていないので新 mart には初回 baseline 分しか入らない。**履歴 backfill が要るかは業務判断** (plan 項目 16)
+- 元 PDS が過去の累積履歴を持つ場合、それは現ソースに残っていないので継承層 (既定 int) の新 PDS には初回 baseline 分しか入らない。**履歴 backfill は本 Agent スコープ外** — 旧 PDS はアーカイブ残置 (plan 項目 16)
