@@ -232,6 +232,19 @@ aux_all = load_aux_entries(src_path)
 aux_for_new = {k: aux_all[k] for k in PUBLISHABLE_AUX_ENTRIES if k in aux_all}
 ```
 
+**Container 形式の正規化 (必須・冪等)**: フローによっては Clean ステップが `.v1.Container` で表現される。読み込み直後に 1 度だけ正規化して以後の全処理を flat SuperTransform 形式に統一する。node id は保たれるので設計案の step ID 参照はそのまま解決する。詳細は [../../../../references/tfl-json-schema.md §Clean ステップの 2 つのシリアライズ形式](../../../../references/tfl-json-schema.md#clean-ステップの-2-つのシリアライズ形式)。
+
+```python
+from flow_io import normalize_source_containers
+
+original, skipped = normalize_source_containers(original)
+if skipped:
+    # 非変換 Container (マルチ namespace / 分岐 / ネスト): verbatim 転写のみ可、actions 分割不可
+    print(f"[warn] non-convertible containers left verbatim: {skipped}")
+```
+
+Container を含まない (既に flat) フローでは no-op (`skipped=[]`, ノード無変更) なので無条件に呼んでよい。
+
 `original["nodes"]` がノード辞書、`original["connections"]` が接続辞書。詳細スキーマは [../../../../references/tfl-json-schema.md](../../../../references/tfl-json-schema.md) 参照。
 
 ⚠️ `aux_for_new` を握り続けて Step 4 の `pack_flow_json` に渡すこと。これを忘れると `flow` だけの zip になり Server publish が拒否される。

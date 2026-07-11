@@ -154,18 +154,25 @@ def transplant_source_input(
     if not conn_id:
         return new_input["id"]
 
+    def _copy_connection(cid: str) -> None:
+        conn = (source_flow.get("connections") or {}).get(cid)
+        if conn is not None:
+            new_flow.setdefault("connections", {})[cid] = copy.deepcopy(conn)
+            if cid not in new_flow.setdefault("connectionIds", []):
+                new_flow["connectionIds"].append(cid)
+
     dconn = (source_flow.get("dataConnections") or {}).get(conn_id)
     if dconn is not None:
+        # wrapped variant: connectionId -> dataConnection -> baseConnection
         new_flow.setdefault("dataConnections", {})[conn_id] = copy.deepcopy(dconn)
         if conn_id not in new_flow.setdefault("dataConnectionIds", []):
             new_flow["dataConnectionIds"].append(conn_id)
         base_id = dconn.get("baseConnectionId")
         if base_id:
-            base = (source_flow.get("connections") or {}).get(base_id)
-            if base is not None:
-                new_flow.setdefault("connections", {})[base_id] = copy.deepcopy(base)
-                if base_id not in new_flow.setdefault("connectionIds", []):
-                    new_flow["connectionIds"].append(base_id)
+            _copy_connection(base_id)
+    else:
+        # direct variant: connectionId points straight into connections
+        _copy_connection(conn_id)
 
     return new_input["id"]
 

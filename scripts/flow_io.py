@@ -113,6 +113,12 @@ def inspect_input_node(flow: dict[str, Any], node_id: str) -> dict[str, Any]:
     Detection is decisive (no fuzzy matching): vconn requires both
     nodeType=='.v1.LoadSql' AND base connection class=='publishedConnection',
     plus a parseable `relation.table` of the form '[<uuid>].[<name>]'.
+
+    Two connection-graph serialization variants are supported:
+      - wrapped: connectionId -> dataConnections[id] -> baseConnectionId ->
+        connections[base] (the base carries class + attributes)
+      - direct: connectionId -> connections[id] (dataConnections empty; the
+        connection itself carries class + attributes)
     """
     node = (flow.get("nodes") or {}).get(node_id)
     if not node or node.get("baseType") != "input":
@@ -126,15 +132,19 @@ def inspect_input_node(flow: dict[str, Any], node_id: str) -> dict[str, Any]:
     if not node_type.endswith(".LoadSql"):
         return {"kind": "unknown", "node_type": node_type}
 
-    # LoadSql: could be vconn OR direct DB. Resolve via dataConnections + connections chain.
-    dconn_id = node.get("connectionId")
-    dconn = (flow.get("dataConnections") or {}).get(dconn_id) if dconn_id else None
-    if not dconn:
-        return {"kind": "unknown", "node_type": node_type, "reason": "dataConnection missing"}
-    base_conn_id = dconn.get("baseConnectionId")
-    base_conn = (flow.get("connections") or {}).get(base_conn_id) if base_conn_id else None
-    if not base_conn:
-        return {"kind": "unknown", "node_type": node_type, "reason": "base connection missing"}
+    # LoadSql: could be vconn OR direct DB. Resolve the "effective connection"
+    # (the one carrying connectionAttributes.class) across both serializations.
+    conn_id = node.get("connectionId")
+    dconn = (flow.get("dataConnections") or {}).get(conn_id) if conn_id else None
+    if dconn:  # wrapped variant: hop through the dataConnection to its base
+        base_conn_id = dconn.get("baseConnectionId")
+        base_conn = (flow.get("connections") or {}).get(base_conn_id) if base_conn_id else None
+        if not base_conn:
+            return {"kind": "unknown", "node_type": node_type, "reason": "base connection missing"}
+    else:  # direct variant: connectionId points straight into connections
+        base_conn = (flow.get("connections") or {}).get(conn_id) if conn_id else None
+        if not base_conn:
+            return {"kind": "unknown", "node_type": node_type, "reason": "connection missing"}
 
     base_class = (base_conn.get("connectionAttributes") or {}).get("class")
     if base_class != "publishedConnection":
@@ -442,6 +452,170 @@ def make_rename_supertransform(
         "afterActionAnnotations": [],
         "actionNode": None,
     }
+
+
+def iter_container_children(node: dict[str, Any]) -> list[dict[str, Any]]:
+    """Walk a `.v1.Container` clean step's internal nodes in execution order.
+
+    A Clean step is serialized in one of two ways: as `.v1.Container` (the
+    "Container" variant) whose operations live in `loomContainer.nodes` as
+    single-action child nodes (`.v1.RenameColumn`, `.v1.AddColumn`, ...) chained
+    linearly via nextNodes, or as a flat `.v2018_2_3.SuperTransform` storing the
+    same operation objects in `beforeActionAnnotations[].annotationNode`. This
+    function handles the Container variant.
+
+    Returns children in chain order (BFS from loomContainer.initialNodes);
+    unreachable children are appended last so nothing is silently dropped.
+    Returns [] when the node has no loomContainer.
+    """
+    lc = node.get("loomContainer") or {}
+    children = lc.get("nodes") or {}
+    order: list[str] = []
+    queue = list(lc.get("initialNodes") or [])
+    while queue:
+        cur = queue.pop(0)
+        if cur in order or cur not in children:
+            continue
+        order.append(cur)
+        for nxt in children[cur].get("nextNodes") or []:
+            nid = nxt.get("nextNodeId") if isinstance(nxt, dict) else nxt
+            if nid and nid not in order and nid not in queue:
+                queue.append(nid)
+    for cid in children:
+        if cid not in order:
+            order.append(cid)
+    return [children[cid] for cid in order]
+
+
+def container_convertibility(node: dict[str, Any]) -> list[str]:
+    """Return [] when a `.v1.Container` is losslessly convertible to a flat
+    SuperTransform, else the list of blocking reasons.
+
+    Convertible = the container is a plain linear Clean step: one
+    Default-namespace input, one Default-namespace output, and a single linear
+    chain of transform children. Anything else (multi namespace, branching
+    chain, nested container) must be transcribed verbatim instead - see
+    references/tfl-json-schema.md.
+    """
+    problems: list[str] = []
+    lc = node.get("loomContainer") or {}
+    children = lc.get("nodes") or {}
+    ns_in = node.get("namespacesToInput") or {}
+    ns_out = node.get("namespacesToOutput") or {}
+    if not children and not ns_in and not ns_out:
+        # Empty Clean step (Container equivalent of an actions=0 SuperTransform):
+        # converts to an empty SuperTransform / gets dropped at decompose.
+        return []
+    if len(ns_in) != 1:
+        problems.append(f"namespacesToInput has {len(ns_in)} entries (expected 1)")
+    if len(ns_out) != 1:
+        problems.append(f"namespacesToOutput has {len(ns_out)} entries (expected 1)")
+    initial = lc.get("initialNodes") or []
+    if len(initial) != 1:
+        problems.append(f"loomContainer.initialNodes has {len(initial)} entries (expected 1)")
+    if ns_in and initial:
+        entry = next(iter(ns_in.values())).get("nodeId")
+        if entry != initial[0]:
+            problems.append("namespacesToInput entry != loomContainer.initialNodes[0]")
+    exits = [cid for cid, c in children.items() if not (c.get("nextNodes") or [])]
+    if len(exits) != 1:
+        problems.append(f"{len(exits)} terminal children (expected 1 linear chain)")
+    elif ns_out:
+        out_id = next(iter(ns_out.values())).get("nodeId")
+        if out_id != exits[0]:
+            problems.append("namespacesToOutput entry != terminal child")
+    for cid, c in children.items():
+        if len(c.get("nextNodes") or []) > 1:
+            problems.append(f"child {cid[:8]} branches ({len(c['nextNodes'])} nextNodes)")
+        if c.get("nodeType", "").endswith(".Container"):
+            problems.append(f"nested container at child {cid[:8]}")
+    # iter_container_children appends unreachable children last; detect them
+    # by re-walking reachability strictly from initialNodes.
+    seen: set[str] = set()
+    queue = list(initial)
+    while queue:
+        cur = queue.pop(0)
+        if cur in seen or cur not in children:
+            continue
+        seen.add(cur)
+        for nxt in children[cur].get("nextNodes") or []:
+            nid = nxt.get("nextNodeId") if isinstance(nxt, dict) else nxt
+            if nid:
+                queue.append(nid)
+    if len(seen) != len(children):
+        problems.append(f"{len(children) - len(seen)} children unreachable from initialNodes")
+    return problems
+
+
+def container_to_supertransform(node: dict[str, Any]) -> dict[str, Any]:
+    """Convert a `.v1.Container` Clean step into the flat
+    `.v2018_2_3.SuperTransform` equivalent (the two are logically equivalent
+    representations of the same Clean step).
+
+    The shell keeps id / name / nextNodes / description so outer wiring is
+    untouched; children are wrapped as {"namespace": "Default",
+    "annotationNode": <child>} in chain order. Children already carry the
+    intra-chain nextNodes (last one is []), matching how flat-format
+    annotationNodes chain.
+
+    Raises ValueError when container_convertibility() reports blockers -
+    callers fall back to verbatim transcription of the Container node.
+    """
+    problems = container_convertibility(node)
+    if problems:
+        raise ValueError(
+            f"Container '{node.get('name')}' is not convertible: " + "; ".join(problems)
+        )
+    annotations = [
+        {"namespace": "Default", "annotationNode": copy.deepcopy(child)}
+        for child in iter_container_children(node)
+    ]
+    return {
+        "nodeType": ".v2018_2_3.SuperTransform",
+        "name": node.get("name"),
+        "id": node.get("id"),
+        "baseType": "superNode",
+        "nextNodes": copy.deepcopy(node.get("nextNodes") or []),
+        "serialize": False,
+        "description": node.get("description"),
+        "beforeActionAnnotations": annotations,
+        "afterActionAnnotations": [],
+        "actionNode": None,
+    }
+
+
+def normalize_source_containers(
+    source_flow: dict[str, Any],
+) -> tuple[dict[str, Any], list[str]]:
+    """Return a copy of source_flow with every convertible `.v1.Container`
+    clean step rewritten as a flat `.v2018_2_3.SuperTransform`.
+
+    Some flows serialize Clean steps as Containers (see iter_container_children);
+    the rest of this toolchain (copy_source_node, split_supertransform_actions,
+    the extractor inventory, verify checks) speaks the flat SuperTransform +
+    beforeActionAnnotations dialect. Running this pass once at the top of a build
+    normalizes the whole source to that dialect so no downstream code needs a
+    Container branch.
+
+    Node id / name / nextNodes are preserved, so any node-id constants the build
+    script references (e.g. N_CLEAN1) keep resolving and all edge wiring is intact.
+
+    Non-convertible Containers (multi-namespace, branching, or nested - see
+    container_convertibility) are left verbatim and named in the returned list so
+    the caller can surface a warning; they must be whole-copied to a single layer,
+    never actions-split.
+    """
+    out = copy.deepcopy(source_flow)
+    skipped: list[str] = []
+    for nid, node in list((out.get("nodes") or {}).items()):
+        if not node.get("nodeType", "").endswith(".Container"):
+            continue
+        problems = container_convertibility(node)
+        if problems:
+            skipped.append(f"{node.get('name', nid)}: {'; '.join(problems)}")
+            continue
+        out["nodes"][nid] = container_to_supertransform(node)
+    return out, skipped
 
 
 def verify_lineage_closure(
