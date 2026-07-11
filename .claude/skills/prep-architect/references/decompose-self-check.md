@@ -1,6 +1,6 @@
 # decompose 完了前 self-check (詳細版)
 
-`decomposition-plan-<flow>.md` を出力する直前に **必ず通す** 14 項目チェック。SKILL.md からは 1 行サマリでしか参照されないため、各項目の **判定基準と典型 anti-pattern** を本ファイルに集約する。
+`decomposition-plan-<flow>.md` を出力する直前に **必ず通す** 15 項目チェック。SKILL.md からは 1 行サマリでしか参照されないため、各項目の **判定基準と典型 anti-pattern** を本ファイルに集約する。
 
 prep-builder の build 開始時にも `verify_lineage_closure` / `verify_edge_namespaces` で機械的に二重防御するが、decompose 段で潰しておくほうがやり直しが安い (build → publish → run fail → rebuild の loop が 10-15 min)。
 
@@ -102,6 +102,20 @@ augmenter ([prep-pds-augmenter](../../prep-pds-augmenter/SKILL.md)) で表現可
 
 prep-builder の build 時にも `verify` で同じチェックが走るため二重防御は効くが、decompose 段で潰すほうがやり直しが安い。
 
-## 14. 是正と再出力
+## 14. mart Rename-back 表のカバレッジ (内部名の露出ゼロ)
 
-1〜13 で不整合や検討漏れが見つかったら、是正してから plan を出力する。
+`## Output mapping` に行を持つ mart (= 元 output を引き継ぐ mart) は **Rename-back 表** を必須で持ち、その mart に到達する rename 済み列を全カバーしているか ([../../../../references/decomposition-plan-format.md §Rename-back](../../../../references/decomposition-plan-format.md))。
+
+判定手順:
+
+1. stg 翻訳 + 翻訳済み派生列 (サフィックス付き変種を含む) から、その mart の出力に到達する列を列挙する
+2. 各列が Rename-back 表に「internal name → original name」の行を持つか照合する
+3. 漏れ = 内部名 (英語 snake_case) が既存消費者向け出力に露出する。旧 Workbook の field 束縛は名前ベースなので repoint 時に invalid field になる
+
+サフィックス保存 (`settlement_date_買付` → `約定日_買付`) の適用漏れが典型的な取りこぼし。逆に **rename を経ていない列を表に載せない** (無意味な RenameColumn action が増える)。
+
+新規 mart (Output mapping に行が無い) は本項目の対象外。取りこぼしても prep-output-comparator の厳密一致チェックで gap として発覚する (二重防御) が、decompose 段で潰すほうが安い。
+
+## 15. 是正と再出力
+
+1〜14 で不整合や検討漏れが見つかったら、是正してから plan を出力する。

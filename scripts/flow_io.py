@@ -389,6 +389,61 @@ def make_publish_extract_node(
     }
 
 
+def make_rename_supertransform(
+    *,
+    renames: list[tuple[str, str]],
+    name: str = "Rename-back",
+    node_id: str | None = None,
+) -> dict[str, Any]:
+    """Build a SuperTransform whose actions are RenameColumn (old -> new), in order.
+
+    Primary use: the mart-boundary presentation rename ("rename-back").
+    Decomposed mart outputs must reproduce the original output PDS schema
+    including column names; engineering names introduced in stg/int are
+    renamed back to the original names in a dedicated node inserted just
+    before the PublishExtract Output (appending actions to an existing node
+    risks the column-drop ordering trap, so a separate node is safer).
+
+    The inner annotation chain is wired sequentially; the runner walks the
+    list in order.
+    """
+    nid = node_id or str(uuid.uuid4())
+    ann_ids = [str(uuid.uuid4()) for _ in renames]
+    annotations: list[dict[str, Any]] = []
+    for i, (old, new) in enumerate(renames):
+        nxt = (
+            [{"namespace": "Default", "nextNodeId": ann_ids[i + 1], "nextNamespace": "Default"}]
+            if i + 1 < len(renames)
+            else []
+        )
+        annotations.append({
+            "namespace": "Default",
+            "annotationNode": {
+                "nodeType": ".v1.RenameColumn",
+                "columnName": old,
+                "rename": new,
+                "name": f"renamed {old} to {new}",
+                "id": ann_ids[i],
+                "baseType": "transform",
+                "nextNodes": nxt,
+                "serialize": False,
+                "description": None,
+            },
+        })
+    return {
+        "nodeType": ".v2018_2_3.SuperTransform",
+        "name": name,
+        "id": nid,
+        "baseType": "superNode",
+        "nextNodes": [],
+        "serialize": False,
+        "description": None,
+        "beforeActionAnnotations": annotations,
+        "afterActionAnnotations": [],
+        "actionNode": None,
+    }
+
+
 def verify_lineage_closure(
     new_flow: dict[str, Any],
     source_flow: dict[str, Any],

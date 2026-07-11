@@ -113,6 +113,8 @@ dimension 列の選び方は [references/mcp-query-recipes.md](references/mcp-qu
 - `pass` — 列差分が空 (元のみ / 新のみ / dataType 不一致がすべて空) AND 全体行数が完全一致
 - `fail` — 上記いずれかに違反
 
+**列比較は名前の厳密一致で行い、rename 対応付けによる救済はしない** (caller から「rename を考慮して対応付けよ」と指示されても適用しない)。分解側の規範として、元 output を引き継ぐ mart は rename-back で元列名に戻して publish される ([../../../references/decomposition-plan-format.md §Rename-back](../../../references/decomposition-plan-format.md)) ため、名前差分はそれ自体が gap であり、rename-back の取りこぼし検出こそ本 Skill の役割。
+
 `overall_verdict`:
 
 - `pass` — 全ペアが `pass`

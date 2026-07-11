@@ -56,7 +56,8 @@ mart 層は次の三本立て + 事前集計派生で構成:
 |---|---|
 | 最終ファクト / ディメンションの形成 | 生データへの直接依存 |
 | `fct_` と `dim_` を **別 .tfl・別 Published DS** として publish | intermediate ロジックの混入 |
-| BI が複数 dim を組合せて読む用途には `rpt_*.tfl` を作って結合済み Published DS を提供 | — |
+| BI が複数 dim を組合せて読む用途には `rpt_*.tfl` を作って結合済み Published DS を提供 | エンジニアリング命名 (英語 snake_case) を既存消費者向け出力に露出させること |
+| **元 output を引き継ぐ mart は rename-back で元列名に戻す** — 出力 PDS は元 output PDS とスキーマ完全一致 (列名含む)。内部命名は stg/int まで ([decomposition-plan-format.md §Rename-back](decomposition-plan-format.md#rename-back-mart-境界の-presentation-rename)) | — |
 
 **なぜ rpt_ を作るのか**: Tableau Workbook の Data Model では **Published DS 同士を Relationship / Join できない**。Workbook 側で組合せる手段は Data Blending のみで、非加法集計（COUNTD / MEDIAN 等）や複雑なジョイン条件には制約がある。そのため複数 dim を結合した分析が必要なら **Prep 内で物理 JOIN した OBT を別 Published DS として持つ** のが現実解。
 

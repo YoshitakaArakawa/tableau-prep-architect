@@ -34,7 +34,8 @@ prep-architect ─ decompose      分解設計 → decomposition-plan-<flow>.md
                                 + rename 翻訳 + provisioning 案を embed
                 ↓
 ★ Stop 2 ユーザー確認 (1 ターン) ★    decomposition-plan-<flow>.md を提示。Tier 1 (新 .tfl 命名 / レイヤ配置 /
-                                       Input policy / rename 翻訳 / 整備依頼 / Output mapping) を明示確認、
+                                       Input policy / rename 翻訳 / 整備依頼 / Output mapping + 列レベル
+                                       Rename-back — mart 出力列名は元 output PDS と完全一致) を明示確認、
                                        Tier 2 (Materialization / project layout / Migration order 等) は
                                        異論時のみ修正。OK で build に進む。詳細は
                                        [prep-architect/references/review-checkpoints.md](.claude/skills/prep-architect/references/review-checkpoints.md)

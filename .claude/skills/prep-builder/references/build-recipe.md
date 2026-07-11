@@ -345,6 +345,25 @@ ctx["layer_projects"][layer] = {
 | ローカル `.hyper`（検証用のみ） | `WriteToHyper` | Prep Builder GUI 単体検証 |
 | DB テーブル | `WriteToDatabase` | 既存 DWH への書き戻し |
 
+#### 3d-2. mart の Rename-back ノード挿入 (Output mapping に行を持つ mart のみ)
+
+plan の mart entry に `Rename-back (presentation rename)` 表がある場合 ([decomposition-plan-format.md §Rename-back](../../../../references/decomposition-plan-format.md))、**最終変換ノードと PublishExtract Output の間に専用 SuperTransform を 1 つ挿入**する。既存最終ノードへの actions 追記は列削除順序の罠を踏みうるため、独立ノードが安全。
+
+```python
+from flow_io import make_rename_supertransform
+
+rb = make_rename_supertransform(
+    renames=[("ticker", "銘柄"), ("settlement_date_買付", "約定日_買付")],  # plan の表の行順
+    name="Rename-back",
+)
+new_flow["nodes"][rb["id"]] = rb
+# wiring: <最終変換ノード> → rb → out_node (すべて Default edge)
+add_edge(last_node, rb["id"])
+add_edge(rb, out_node["id"])
+```
+
+verify: Rename-back 適用後の出力列集合が plan の Rename-back 表の `original name` を全て含み、`internal name` を 1 つも含まないこと (内部名の露出ゼロ)。
+
 #### 3e. 不要フィールドの除去
 
 新 .tfl では:
