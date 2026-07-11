@@ -38,7 +38,9 @@ publish に進む前に確認すべき項目：
 7. rpt_* を publish → run → finishCode=0 確認
 ```
 
-`auto_patch_downstream.py` は manifest の `run.status == success` 全件を ready 集合として、全 .tfl をスキャン → 参照のある PDS の dbname を Cloud から resolve → 一括 patch する。idempotent (再実行しても同じ dbname なら no-op) なので、各レイヤ完走後に毎回呼んで良い。同一レイヤ内に sub-DAG がある (例: intermediate 内で int_price_latest → int_transactions_enriched) 場合も、sub-DAG の wave 完走ごとに呼べばカバーできる。手動で `discover_pds_dbname.py --patch` を 1 ペアずつ叩く必要は無くなった。
+`auto_patch_downstream.py` は「Cloud 上に PDS が実在する」entry 全件を ready 集合として、全 .tfl をスキャン → 参照のある PDS の dbname を Cloud から resolve → 一括 patch する。ready の条件は kind で異なる: `kind=tfl` は `run.status == success` (run が PDS を実体化する)、`kind=pds_augment` は `publish.status == published` (Live PDS は publish 時点で実在、run は n/a)。idempotent (再実行しても同じ dbname なら no-op) なので、各レイヤ完走後に毎回呼んで良い。同一レイヤ内に sub-DAG がある (例: intermediate 内で int_price_latest → int_transactions_enriched) 場合も、sub-DAG の wave 完走ごとに呼べばカバーできる。手動で `discover_pds_dbname.py --patch` を 1 ペアずつ叩く必要は無くなった。
+
+**stg が `kind=pds_augment` (Live PDS) を含む場合の順序**: Live PDS の実 dbname (content_url) は publish して初めて確定するので、**stg レイヤの publish → manifest update-publish → `auto_patch_downstream.py` → それから int を publish** の順を守る。patch 前に int を publish してしまうと、サーバー上の flow は placeholder dbname のまま run fail するため、patch 後に `--mode Overwrite` で再 publish が必要になる (手戻り)。stg augment は run を持たないので「stg の run 完了を待つ」ステップは無い。
 
 **なぜ run まで挟むか**: 各レイヤの flow Input (LoadSqlProxy) は上流レイヤの **Published DS が Cloud 上に既に存在すること** を前提に publish される。run 前は publish 自体は通っても、上流 PDS が無い状態で run すると `Input data source not found` で finishCode=1。1 レイヤ完了 (publish + run + 成功確認) してから次レイヤに進む。
 

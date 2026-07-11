@@ -46,6 +46,19 @@ except ImportError:
     sys.exit("ERROR: python-dotenv is required. Install with: pip install -r requirements.txt")
 
 
+# Windows consoles default to a legacy codepage (e.g. cp932) that cannot encode
+# characters like em-dashes in CLI output. A failed print would abort a script
+# whose real work already succeeded (observed as UnicodeEncodeError -> exit 1
+# after the output file was written), so downgrade encoding errors on the std
+# streams to replacement characters. This module is the common import point for
+# every server-facing script, so the guard applies repo-wide.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
+
 CLIENT_TYPE = "tableau-prep-architect"
 USER_AGENT = "tableau-prep-architect/0.1 (python)"
 DEFAULT_CALLBACK_PORT = 8765

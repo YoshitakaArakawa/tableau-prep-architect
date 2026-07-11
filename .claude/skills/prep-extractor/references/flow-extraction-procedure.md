@@ -1,6 +1,6 @@
 # Phase A 実装手順
 
-Phase A (flow extraction) の 7 ステップ実装ガイド。SKILL.md からは 1 行サマリでしか参照されないため、本ファイルに詳細を集約する。
+Phase A (flow extraction) の 4 ステップ実装ガイド。SKILL.md からは 1 行サマリでしか参照されないため、本ファイルに詳細を集約する。
 
 ## Step 1: 入力ファイルの展開
 
@@ -14,61 +14,34 @@ unpack_flow_json('<input.tfl>', 'work/<date>/flow.json')
 "
 ```
 
-## Step 2: 構造情報の確認
+## Step 2: flow-summary.md の機械生成
 
-以下を Read して flow JSON の構造を把握する:
-
-- [../../../../references/tfl-json-schema.md](../../../../references/tfl-json-schema.md) — ファイル形式、トップレベル JSON 構造、UI ステップ ⇔ nodeType ⇔ actions サブタイプの対応表、`previousNodes` の罠、`beforeActionAnnotations` ラップ構造、`initialNodes` BFS 規約
-- [flow-summary-format.md](flow-summary-format.md) — 出力書式の厳密仕様
-
-## Step 3: トポロジ復元
-
-LLM 自身が flow.json を読んで以下を抽出する（ノード数が多ければ Bash で支援してよい）:
-
-1. `flow["initialNodes"]` をエントリーポイントとして BFS 順序を確定 → 短 ID `#1, #2, ...` を採番
-2. 各ノードの `nextNodes[].nextNodeId` を抽出 → これを反転して各ノードの `Prev` を求める（`previousNodes` は空なので使わない）
-3. `nodeType` の version prefix を剥がす（最後のドット以降を採用）
-4. ノード名（`name`）と組み合わせて Topology テーブルを構築
-
-BFS の擬似コードは [tfl-json-schema.md](../../../../references/tfl-json-schema.md) 参照。
-
-## Step 4: actions inventory 生成
-
-各 SuperTransform について `beforeActionAnnotations` 配列を走査:
-
-- 各要素は `{"annotationNode": {...}}` でラップされているので 1 階下ろす
-- 内側 `nodeType` の末尾に応じて要約フォーマットを選ぶ
-- 詳細フォーマットは [flow-summary-format.md](flow-summary-format.md) の actions inventory セクション参照
-
-ノード数が多くて手動走査が辛い場合は支援スクリプトを使う:
+`gen_flow_summary.py` を **実行** する。5 セクション (Meta / Topology / Dependency DAG / SuperTransform actions inventory / Warnings) すべてをこのスクリプトが生成する。セクションを手で組み立てない（部分的な summary を防ぐため低自由度に固定）:
 
 ```bash
-python .claude/skills/prep-extractor/scripts/inspect_actions.py \
+python .claude/skills/prep-extractor/scripts/gen_flow_summary.py \
     work/<date>/flow.json \
-    -o work/<date>/scratch/_actions-tmp.md
+    -o work/<date>/reports/flow-summary.md \
+    --flow-name "<元 .tfl のファイル名 stem>"
 ```
 
-このスクリプトの出力はそのまま flow-summary.md の対応セクションに転記してよい。Topology テーブルや Mermaid DAG は LLM が直接生成する。
+flow JSON の構造を深掘りしたい場合の参照:
 
-## Step 5: Mermaid DAG 生成
+- [../../../../references/tfl-json-schema.md](../../../../references/tfl-json-schema.md) — ファイル形式、UI ステップ ⇔ nodeType ⇔ actions の対応、`previousNodes` の罠、`initialNodes` BFS 規約
+- [flow-summary-format.md](flow-summary-format.md) — 出力書式の厳密仕様（スクリプトが実装している）
+- actions 部分だけ欲しいときは `inspect_actions.py`（`gen_flow_summary.py` が内部で import している要約ロジックの単体版）
 
-Topology の Next 列をベースに `graph TD` を出力。各ノードは `n<id>[#<id> <nodeType> <Name>]` 形式。分岐・合流が一目で分かるレイアウトを保つ。
+## Step 3: 生成結果のレビュー
 
-## Step 6: Warnings 集約
+生成された flow-summary.md を Read して検算する:
 
-走査中に検出した以下を Warnings セクションに列挙:
+1. **5 セクションが揃っているか**（欠けていたら Step 2 のコマンド失敗を疑う。手で補筆しない）
+2. Topology の Prev/Next に明らかな断絶がないか（Disconnected 警告と突き合わせ）
+3. Warnings の ⚠️（未知 nodeType / action type）が出ていたら、処理は続行しつつ完了報告に含める
 
-- 未知 nodeType
-- 未知 action type
-- `beforeActionAnnotations` が空 (`0 actions`) の SuperTransform — 削除候補
-- 重複名のノード — build 時のファイル名衝突要注意
-- 孤立ノード
-- 循環依存の兆候
-- **SuperUnion ノード — 全件必ず 1 行ずつ追加**: `🔒 Node #N <UnionName> (SuperUnion): injects implicit Table Names column — do NOT propose deletion`。actions=0 や branch 同一性に関わらず Union は schema 等価ではない (`Table Names` を暗黙注入する)。analyze / decompose 側で削除候補と判定するのを構造的に防ぐ二重防御
+## Step 4: 書き出しと完了報告
 
-## Step 7: 書き出しと完了報告
-
-`flow-summary.md` を指定パスに Write。ユーザーには以下を簡潔に報告:
+ユーザーには以下を簡潔に報告:
 
 - 出力パス
 - 総ノード数 / SuperTransform 数 / 総 actions 数

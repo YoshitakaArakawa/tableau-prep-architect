@@ -22,6 +22,13 @@ dbt の `sources` 概念に相当。
 - **prep-architect / decompose**: 違反 Input は新 .tfl の Input 設計で仮想接続経由に置き換える
 - **prep-deployer / publish**: 仮想接続 / Published DS 経由なら embed credentials 不要、生 DB 接続なら `connections` パラメータ拡張が必要
 
+## stg を Live PDS で表現する場合の束縛層制約
+
+下流 Prep flow (LoadSqlProxy) は PDS のフィールドを **local-name** で束縛する (caption は BI / VizQL 表示専用)。stg を prep-pds-augmenter の Live PDS で表現し、その stg を下流 Prep が読む構成では:
+
+- **rename**: vconn source の true rename (local-name 書き換え + `<cols><map>`) でのみ成立。caption-only rename の stg は下流 run が "Unknown field name" で fail する。semantics の詳細は prep-pds-augmenter SKILL.md 参照
+- **cast / hide**: 下流 Prep から見た挙動は **未検証**。Prep 消費前提の stg にこれらの op を含める場合は Stop 2 で未検証リスクとして明示し、検証を挟むか実 .tfl 化を検討する
+
 ## 違反の判定例
 
 | Input 種別 | nodeType | 判定 |

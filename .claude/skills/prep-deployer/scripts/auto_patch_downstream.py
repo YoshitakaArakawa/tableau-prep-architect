@@ -96,10 +96,20 @@ def parse_args() -> argparse.Namespace:
 
 
 def ready_pdses(manifest: dict) -> dict[str, str]:
-    """Return a dict {pds_name: layer} for every PDS whose source flow ran successfully."""
+    """Return a dict {pds_name: layer} for every PDS that exists on Cloud.
+
+    Two ways an entry's PDS becomes ready:
+    - kind=tfl:         its flow ran successfully (run.status == success) —
+                        the PDS is (re)materialized by the run.
+    - kind=pds_augment: the Live PDS exists as soon as publish succeeds
+                        (publish.status == published); run stays "n/a".
+    """
     out: dict[str, str] = {}
     for df in manifest.get("decomposed_flows", []):
-        if (df.get("run") or {}).get("status") != "success":
+        if df.get("kind") == "pds_augment":
+            if (df.get("publish") or {}).get("status") != "published":
+                continue
+        elif (df.get("run") or {}).get("status") != "success":
             continue
         layer = df.get("layer")
         if not layer:

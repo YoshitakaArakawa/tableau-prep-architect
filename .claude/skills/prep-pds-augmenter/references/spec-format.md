@@ -97,9 +97,9 @@ caller (= 通常 prep-builder) が vconn テーブルの列を 1 つずつ enume
 
 | op | 必須フィールド | 動作 |
 |---|---|---|
-| `rename` | `column_name`, `to_caption` | `<column caption='...'>` を書き換え。`name` は不変。VizQL Metadata API / Workbook / Prep input の全てに反映される |
+| `rename` | `column_name`, `to_caption` | semantics は source kind で変わる。**vconn**: true rename — caption に加えて local-name 層 (`<column name>` / `<local-name>`) を `[to_caption]` に書き換え、`<cols><map>` で物理列へマッピング。BI と下流 Prep (LoadSqlProxy) の両方に新名が見える。**extract / live**: caption のみ書き換え (`name` 不変)。BI / VizQL には反映されるが、**下流 Prep は local-name で束縛するため旧名のまま** — Prep 消費前提の rename には使えない (stg は実 .tfl で作る) |
 | `cast` | `column_name`, `to_caption`, `to_datatype` | 元 column に `hidden='true'` を付け、`<calculation class='tableau' formula='<FUNC>([orig_name])'/>` を新規 column として注入。`<FUNC>` は datatype から導出 (`real`→`FLOAT` / `integer`→`INT` / `string`→`STR` / `date`→`DATE` / `datetime`→`DATETIME`)。boolean は default なし、`cast_formula` で明示式が必要 |
-| `hide` | `column_name` | `<column>` に `hidden='true'` を追加。VizQL field 一覧から消える (Workbook / Prep input の picker からも消える) |
+| `hide` | `column_name` | `<column>` に `hidden='true'` を追加。VizQL field 一覧 / Workbook picker から消える (下流 Prep に対する遮蔽は未検証) |
 
 `cast` のオプションフィールド: `cast_formula` (default の `FUNC(orig)` を上書き), `role` (default は to_datatype から導出), `type` (default は role から導出)。
 

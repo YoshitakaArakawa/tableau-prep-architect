@@ -1,6 +1,6 @@
 ---
 name: prep-pds-augmenter
-description: Tableau Cloud / Server 上の Published Data Source を Calculated Field 注入と column-level transforms (rename / cast / hide) で機械的に改変・量産する Skill。extract-based (Hyper-backed) / live-connection (virtual-connection backed の既存 PDS) / vconn (既存 PDS なしで仮想接続から base .tds をゼロから組み立てて publish) の 3 種の source をサポート。download (extract/live) または synthesize (vconn) → .tds XML 編集 → publish (CreateNew default / Overwrite) → 再 DL 検証を一気通貫で実行。Prep フローが publish した Hyper Output に派生列を足したいとき、stg レイヤを Prep の代わりに Live PDS で表現したいとき (rename / cast / hide で stg 責務を XML 編集に置き換える)、分解元 Prep の Input が仮想接続だった場合に stg 相当の Live PDS を vconn から直接 publish したいとき、calc 込み PDS を量産したいときに起動。caller が calc 仕様 (caption / formula / datatype)、transform 仕様 (column_name / to_caption / to_datatype)、vconn-source なら列メタ (name / caption / datatype) を明示提供する前提で、formula / naming 規約 / 列スキーマの auto-detect はしない。
+description: Tableau Cloud / Server 上の Published Data Source を Calculated Field 注入と column-level transforms (rename / cast / hide) で機械的に改変・量産する Skill。extract-based (Hyper-backed) / live-connection (virtual-connection backed の既存 PDS) / vconn (既存 PDS なしで仮想接続から base .tds をゼロから組み立てて publish) の 3 種の source をサポート。download (extract/live) または synthesize (vconn) → .tds XML 編集 → publish (CreateNew default / Overwrite) → 再 DL 検証を一気通貫で実行。rename の semantics は source kind で異なる: vconn は true rename (local-name 書き換え + cols map、下流 Prep からも新名で読める)、extract/live は caption-only (BI 表示のみ、下流 Prep 消費には不十分)。Prep フローが publish した Hyper Output に派生列を足したいとき、分解元 Prep の Input が仮想接続だった場合に stg 相当の Live PDS を vconn から直接 publish したいとき (下流 Prep が読む stg はこの経路のみ)、既存 Live PDS に BI 向けの rename / cast / hide を当てたいとき、calc 込み PDS を量産したいときに起動。caller が calc 仕様 (caption / formula / datatype)、transform 仕様 (column_name / to_caption / to_datatype)、vconn-source なら列メタ (name / caption / datatype) を明示提供する前提で、formula / naming 規約 / 列スキーマの auto-detect はしない。
 ---
 
 # prep-pds-augmenter
@@ -9,9 +9,18 @@ Tableau Cloud / Server 上の Published Data Source (PDS) を **transforms** (re
 
 主な用途:
 - Prep flow が出力した Hyper PDS に汎用的な派生列 (利益率 / 換算金額 / 閾値フラグ) を後付けで足す (= 既存ユースケース)
-- 仮想接続経由の既存 Live PDS に対して stg レイヤ責務 (型キャスト / リネーム / 不要列の hide) を Prep の代わりに XML 編集で表現する (= 拡張ユースケース、物理化を避けたいとき、`source.kind: "live"`)
 - **分解元 Prep の Input が仮想接続だった場合に、stg 相当の Live PDS を vconn から直接 publish** する (`source.kind: "vconn"`、既存 base PDS が不要)
+- 仮想接続経由の既存 Live PDS に対して BI 向けの rename / cast / hide を XML 編集で当てる (`source.kind: "live"`)
 - composable PDS 公開時に派生列込みの PDS を量産する編集パイプライン
+
+## rename semantics (束縛層の契約)
+
+下流 Prep flow (LoadSqlProxy) は PDS のフィールドを **local-name** で束縛し、caption は BI / VizQL の表示専用。この分離により rename の semantics は source kind で異なる:
+
+| source kind | rename の実体 | 下流 Prep から新名で読めるか |
+|---|---|---|
+| `vconn` | **true rename**: caption + local-name 書き換え + `<cols><map>` で物理列へマッピング | ✅ 読める (stg-as-Live-PDS が成立する唯一の経路) |
+| `extract` / `live` | caption-only (`name` 不変)。既存 consumer の field 参照を壊さないため | ❌ 旧名のまま。Prep 消費前提なら stg を実 .tfl で作る |
 
 書き込み副作用 (新規 PDS 作成 or 既存 PDS 上書き) を伴うため、caller が target / new name / transforms / calcs / (vconn 時は) 列メタを明示合意してから呼ぶ前提。
 

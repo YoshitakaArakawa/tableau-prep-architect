@@ -1,7 +1,7 @@
 """Augment a Tableau Published Data Source with transforms and Calculated Fields.
 
-Reads a spec JSON, applies transforms (rename caption / hide column / cast type
-via hidden+calc) and/or injects <column><calculation/></column> elements into
+Reads a spec JSON, applies transforms (rename / hide column / cast type via
+hidden+calc) and/or injects <column><calculation/></column> elements into
 the .tds XML, publishes, and re-downloads to verify the edits survived.
 
 Source kinds:
@@ -14,6 +14,15 @@ Source kinds:
   applies transforms, publishes (CreateNew only). Used by prep-builder when the
   decomposed Prep flow's Input was a virtual connection and stg is to be
   materialized as a Live PDS without going through Prep.
+
+Rename semantics (binding-layer contract):
+- kind="vconn"        -> TRUE RENAME: local-name rewrite + <cols> map to the
+  physical column. Required because downstream Prep flows (LoadSqlProxy) bind
+  PDS fields by local-name; caption is display-only for BI/VizQL.
+- kind="extract/live" -> caption-only. Safe for BI consumers of an existing
+  PDS (true rename would break their field references), NOT sufficient when a
+  downstream Prep flow reads the PDS. Renaming for Prep consumption on these
+  kinds is unsupported - materialize the stg as a real .tfl instead.
 
 See SKILL.md and references/tds-calc-field-format.md for the spec contract and
 XML shape.
@@ -624,12 +633,74 @@ def wrap_tds_as_tdsx(tds_text: str, tds_entry_name: str, out_path: Path) -> None
 # Transform pipeline
 # ---------------------------------------------------------------------------
 
+def apply_true_renames(
+    tds_text: str,
+    rename_ops: list[dict],
+    columns: list[dict],
+    table_name: str,
+) -> str:
+    """Rewrite rename targets at the local-name layer (vconn sources only).
+
+    Downstream Prep flows (LoadSqlProxy) bind PDS fields by local-name; the
+    caption is display-only for BI/VizQL. A caption-only rename therefore
+    leaves downstream Prep seeing the physical (e.g. UUID) names. This
+    function performs the "true rename":
+
+      1. every bracketed occurrence of the old name (`<local-name>` in
+         metadata-records + the `name` attr on `<column>`) becomes
+         `[to_caption]`
+      2. remote-name / remote-alias keep the physical identity
+      3. a `<cols><map key='[to_caption]' value='[table].[remote]'/></cols>`
+         block after `</metadata-records>` maps logical -> physical (the
+         same mechanism Desktop emits when logical and remote names differ)
+    """
+    remote_by_name = {c["name"]: c["remote_name"] for c in columns}
+    out = tds_text
+    maps: list[str] = []
+    for t in rename_ops:
+        old, new_cap = t["column_name"], t["to_caption"]
+        if "[" in new_cap or "]" in new_cap:
+            raise SpecError(
+                f"to_caption={new_cap!r} must not contain brackets (it becomes "
+                "the field's local-name under vconn true-rename)"
+            )
+        new_local = f"[{new_cap}]"
+        if new_local in out:
+            raise SpecError(
+                f"true-rename target {new_local} already exists in the .tds - "
+                "caption collides with an existing local-name"
+            )
+        if old not in out:
+            raise SpecError(f"true-rename source {old} not found in the .tds")
+        remote = remote_by_name.get(old)
+        if remote is None:
+            raise SpecError(
+                f"rename target {old} has no matching source.columns[] entry - "
+                "cannot derive the physical remote-name for the <cols> map"
+            )
+        out = out.replace(old, new_local)
+        maps.append(f"      <map key='{new_local}' value='[{table_name}].[{xml_escape(remote)}]' />")
+
+    marker = "</metadata-records>\n"
+    if marker not in out:
+        raise SpecError("source .tds has no </metadata-records> - cannot insert <cols> map")
+    cols_block = "    <cols>\n" + "\n".join(maps) + "\n    </cols>\n"
+    return out.replace(marker, marker + cols_block, 1)
+
+
 def apply_transforms(
     tds_text: str,
     transforms: list[dict],
     base_calc_id: int,
+    vconn_ctx: dict | None = None,
 ) -> tuple[str, list[dict], list[tuple[str, str]]]:
     """Apply rename / cast / hide transforms to the .tds in place.
+
+    `vconn_ctx` ({"columns": [...], "table_name": str}) switches rename ops to
+    true-rename semantics (local-name rewrite + <cols> map) - required for a
+    stg PDS that downstream Prep flows will read. Without it (download-based
+    extract/live sources) renames stay caption-only, which is safe for PDSes
+    consumed by BI but NOT sufficient for downstream Prep consumption.
 
     Returns:
         - new tds text (with renames, hides, and cast-source-hides applied)
@@ -646,11 +717,26 @@ def apply_transforms(
                 "exact `name` attribute (case-sensitive, brackets included)."
             )
 
+    rename_ops = [t for t in transforms if t["op"] == "rename"]
+    if vconn_ctx and rename_ops:
+        # true-rename rewrites the name attr, so a cast/hide on the same
+        # column would reference a name that no longer exists afterwards.
+        overlap = {t["column_name"] for t in rename_ops} & {
+            t["column_name"] for t in transforms if t["op"] in ("cast", "hide")
+        }
+        if overlap:
+            raise SpecError(
+                f"columns {sorted(overlap)} are targeted by rename AND cast/hide - "
+                "unsupported under vconn true-rename (rename the cast output "
+                "caption instead, or drop the rename)"
+            )
+
     out = tds_text
     synthetic_calcs: list[dict] = []
     cast_calc_names: list[tuple[str, str]] = []
 
-    # Apply renames first (only changes caption attribute - safest).
+    # Apply renames first. Caption is always updated; under vconn_ctx the
+    # local-name layer is rewritten afterwards (true rename).
     for i, t in enumerate(transforms):
         if t["op"] != "rename":
             continue
@@ -682,6 +768,13 @@ def apply_transforms(
         })
         cast_calc_names.append((t["column_name"], calc_name))
 
+    # Finally rewrite the local-name layer for vconn sources. Runs last so
+    # hide/cast above operate on the original (physical) names.
+    if vconn_ctx and rename_ops:
+        out = apply_true_renames(
+            out, rename_ops, vconn_ctx["columns"], vconn_ctx["table_name"]
+        )
+
     return out, synthetic_calcs, cast_calc_names
 
 
@@ -701,13 +794,18 @@ def verify_calc_present(verify_text: str, calc: dict, calc_name: str) -> dict:
     }
 
 
-def verify_transform_applied(verify_text: str, t: dict) -> dict:
+def verify_transform_applied(verify_text: str, t: dict, true_rename: bool = False) -> dict:
     """Per-transform survival check on the re-DL'd .tds.
 
     For cast/hide: confirm the source column has hidden='true'.
-    For rename: confirm the new caption appears on the target column.
+    For rename (caption-only): confirm the new caption appears on the target column.
+    For rename (true_rename): the column is looked up by its NEW local-name
+    `[to_caption]` - survival of the renamed name is the gate; the <cols> map's
+    presence is reported as info (the server may normalize it away on re-introspection).
     """
     col_name = t["column_name"]
+    if true_rename and t["op"] == "rename":
+        col_name = f"[{t['to_caption']}]"
     # Find the matching <column> in the verified .tds.
     col_match = None
     for m in _COLUMN_RE.finditer(verify_text):
@@ -716,6 +814,9 @@ def verify_transform_applied(verify_text: str, t: dict) -> dict:
             break
     found = col_match is not None
     out = {"op": t["op"], "column_name": col_name, "column_found_in_verify": found}
+    if t["op"] == "rename" and true_rename:
+        out["semantics"] = "true_rename"
+        out["map_present"] = f"key='{col_name}'" in verify_text
     if not found:
         return out
     if t["op"] == "rename":
@@ -731,6 +832,10 @@ def transform_pass(result: dict) -> bool:
     if not result["column_found_in_verify"]:
         return False
     if result["op"] == "rename":
+        if result.get("semantics") == "true_rename":
+            # The renamed local-name surviving the publish round-trip is the
+            # binding-layer guarantee downstream Prep needs.
+            return True
         return bool(result.get("caption_is_new"))
     if result["op"] == "hide":
         return bool(result.get("hidden_true"))
@@ -825,9 +930,23 @@ def main():
         # Apply transforms first - this rewrites <column> attrs and hides source
         # columns for cast ops, producing synthetic calc specs for the cast ops.
         base_id = int(time.time() * 1000)
-        post_transform_text, synthetic_calcs, cast_calc_pairs = apply_transforms(
-            original_tds_text, spec["transforms"], base_id
+        # vconn sources get true-rename semantics: the synthesized PDS is new,
+        # so no BI content depends on the old names, and downstream Prep flows
+        # require the rename at the local-name layer.
+        vconn_ctx = (
+            {"columns": spec["vconn"]["columns"], "table_name": spec["vconn"]["table_name"]}
+            if kind == "vconn"
+            else None
         )
+        if vconn_ctx and any(t["op"] == "rename" for t in spec["transforms"]):
+            print("[transform] rename semantics: true_rename (vconn source)")
+        try:
+            post_transform_text, synthetic_calcs, cast_calc_pairs = apply_transforms(
+                original_tds_text, spec["transforms"], base_id, vconn_ctx=vconn_ctx
+            )
+        except SpecError as e:
+            print(f"[transform] ERROR: {e}", file=sys.stderr)
+            sys.exit(1)
 
         # Collision detection now runs on the post-transform visible caption space
         # (hidden columns are excluded). All new captions from cast ops + user calcs
@@ -906,7 +1025,10 @@ def main():
         (out_dir / "verified.tds").write_text(verify_text, encoding="utf-8")
 
         # 4a. Verify transforms
-        transform_results = [verify_transform_applied(verify_text, t) for t in spec["transforms"]]
+        transform_results = [
+            verify_transform_applied(verify_text, t, true_rename=vconn_ctx is not None)
+            for t in spec["transforms"]
+        ]
         transforms_ok = all(transform_pass(r) for r in transform_results)
         for t, r in zip(spec["transforms"], transform_results):
             mark = "OK " if transform_pass(r) else "MISS"
@@ -936,6 +1058,7 @@ def main():
             "project_id": target_project_id,
             "mode": spec["mode"],
             "source_kind": spec["source_kind"],
+            "rename_semantics": "true_rename" if vconn_ctx else "caption_only",
             "transforms_applied": len(spec["transforms"]),
             "calcs_injected": len(all_calc_pairs),
             "verified": all_ok,

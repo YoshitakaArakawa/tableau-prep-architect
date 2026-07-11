@@ -68,8 +68,22 @@ def main():
                          project_name=args.project_name)
         output = Path(args.output)
         output.parent.mkdir(parents=True, exist_ok=True)
-        file_path = server.flows.download(flow.id, filepath=str(output))
-        print(f"Downloaded flow '{flow.name}' (id={flow.id}) → {file_path}")
+        # TSC appends the server-side extension to `filepath` unconditionally
+        # (passing "x.tfl" yields "x.tfl.tfl"), so hand it the extension-less
+        # stem and normalize the result to the requested name afterwards.
+        requested_suffix = output.suffix.lower()
+        base = output.with_suffix("")
+        file_path = Path(server.flows.download(flow.id, filepath=str(base)))
+        actual_suffix = file_path.suffix.lower()
+        if requested_suffix and actual_suffix != requested_suffix:
+            final = base.with_suffix(actual_suffix)
+            print(f"WARNING: server returned '{actual_suffix}' (requested "
+                  f"'{requested_suffix}') - saving as {final.name}", file=sys.stderr)
+        else:
+            final = output
+        if file_path != final:
+            file_path.replace(final)
+        print(f"Downloaded flow '{flow.name}' (id={flow.id}) -> {final}")
 
 
 if __name__ == "__main__":
