@@ -572,6 +572,9 @@ def validate_plan_with_source(
             graph = compute_flow_graph(f, resolver, plan)
             issues.extend(f"{name}: {i}" for i in graph.issues)
             notes.extend(f"{name}: {n}" for n in graph.notes)
+            tok_issues, tok_notes = check_expression_tokens(f, resolver, plan)
+            issues.extend(f"{name}: {i}" for i in tok_issues)
+            notes.extend(f"{name}: {n}" for n in tok_notes)
         except PlanError as exc:
             issues.append(f"{name}: {exc}")
 
@@ -590,6 +593,140 @@ def validate_plan_with_source(
         notes.append(
             "steps not assigned to any flow (dropped): "
             + ", ".join(resolver.label(s) for s in unassigned)
+        )
+    return issues, notes
+
+
+# ---------------------------------------------------------------------------
+# Expression-token check (naming-regime guard)
+# ---------------------------------------------------------------------------
+
+# Bracketed field refs inside Prep expression strings, e.g.
+#   "{ PARTITION [銘柄]: { ORDERBY [約定日] ASC: ROW_NUMBER() } }"
+_FIELD_TOKEN_RE = re.compile(r"\[([^\[\]]+)\]")
+# Keys whose string values are Prep expressions (field refs live here).
+_EXPRESSION_KEYS = ("expression", "filterExpression")
+# Keys whose string values NAME a column — anything appearing here is a name
+# the flow itself introduces or manipulates, hence legal for later refs.
+_NAME_KEYS = ("columnName", "rename", "name", "caption", "outputFieldName",
+              "fieldName", "column", "columnNames")
+# Columns Tableau injects implicitly (SuperUnion adds `Table Names`).
+_BUILTIN_COLUMNS = {"Table Names", "Number of Rows"}
+
+
+def _collect_strings(obj: Any, keys: tuple[str, ...], out: set[str]) -> None:
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if k in keys:
+                if isinstance(v, str):
+                    out.add(v)
+                elif isinstance(v, list):
+                    out.update(x for x in v if isinstance(x, str))
+            _collect_strings(v, keys, out)
+    elif isinstance(obj, list):
+        for v in obj:
+            _collect_strings(v, keys, out)
+
+
+def _input_exposed_names(
+    inp: dict[str, Any],
+    resolver: StepResolver,
+    plan_flow_by_name: dict[str, dict[str, Any]],
+) -> set[str] | None:
+    """Column names one plan input exposes to the new flow, or None when the
+    schema is not statically knowable (upstream kind=tfl flow — its output
+    schema exists only after a run)."""
+    kind = inp.get("kind")
+    if kind == "transplant":
+        node = resolver.node(inp["step"])
+        names: set[str] = set()
+        for f in node.get("fields") or []:
+            for key in ("caption", "name"):
+                if f.get(key):
+                    names.add(f[key])
+        # Input-node actions (Input renames) realize display names.
+        _collect_strings(node.get("actions"), _NAME_KEYS, names)
+        return names
+    if kind == "passthrough_pds":
+        names = set()
+        for s in inp.get("replaces_steps") or []:
+            node = resolver.node(s)
+            if node.get("baseType") != "input":
+                continue
+            for f in node.get("fields") or []:
+                for key in ("caption", "name"):
+                    if f.get(key):
+                        names.add(f[key])
+            _collect_strings(node.get("actions"), _NAME_KEYS, names)
+        return names or None
+    # upstream_pds: schema known only when the upstream is a pds_augment
+    # (transform-applied source fields); a tfl upstream is post-run only.
+    up = plan_flow_by_name.get(inp.get("pds_name", ""))
+    if up is not None and up.get("kind") == "pds_augment":
+        return {f["caption"] for f in augment_output_fields(up, resolver)}
+    return None
+
+
+def check_expression_tokens(
+    entry: dict[str, Any],
+    resolver: StepResolver,
+    plan: dict[str, Any],
+) -> tuple[list[str], list[str]]:
+    """Cross-check transcribed expressions against upstream exposed names.
+
+    Catches the naming-regime break (e.g. a semantically-translated stg whose
+    downstream verbatim-transcribed expressions still reference the original
+    names) BEFORE Stop 2 / build, instead of at flow run time. Set-based on
+    purpose: names created anywhere inside this flow's own nodes are allowed
+    without ordering analysis — the target failure mode is a wholesale
+    upstream-name mismatch, not a subtle ordering bug.
+
+    Returns (issues, notes). When any input's schema is not statically
+    knowable, the check is skipped with a note (never guess).
+    """
+    issues: list[str] = []
+    notes: list[str] = []
+    plan_flow_by_name = {f["name"]: f for f in plan.get("flows", [])}
+
+    allowed: set[str] = set(_BUILTIN_COLUMNS)
+    for inp in entry.get("inputs", []) or []:
+        exposed = _input_exposed_names(inp, resolver, plan_flow_by_name)
+        if exposed is None:
+            notes.append(
+                "式トークン照合 skip: 上流スキーマが静的に不明 "
+                f"(input {inp.get('pds_name') or inp.get('step')})"
+            )
+            return issues, notes
+        allowed |= exposed
+
+    # Names introduced/manipulated by this flow's own transcribed nodes.
+    tokens: set[str] = set()
+    own_nodes: list[dict[str, Any]] = []
+    for step in entry.get("included_steps", []) or []:
+        own_nodes.append(resolver.node(step))
+    for sp in entry.get("splits", []) or []:
+        node = resolver.node(sp["step"])
+        acts = node.get("beforeActionAnnotations") or []
+        own_nodes.append({
+            "beforeActionAnnotations": [acts[k] for k in sp["action_indices"]
+                                        if 0 <= k < len(acts)]
+        })
+    for node in own_nodes:
+        _collect_strings(node, _NAME_KEYS, allowed)
+        exprs: set[str] = set()
+        _collect_strings(node, _EXPRESSION_KEYS, exprs)
+        for e in exprs:
+            tokens.update(_FIELD_TOKEN_RE.findall(e))
+
+    unknown = sorted(tokens - allowed)
+    if unknown:
+        shown = ", ".join(f"[{t}]" for t in unknown[:8])
+        more = f" (+{len(unknown) - 8})" if len(unknown) > 8 else ""
+        issues.append(
+            f"転写式が上流スキーマに無い列を参照: {shown}{more} — "
+            "上流 stg の to_caption が元名からズレている (semantic translation "
+            "は禁止、input-policy.md §命名レジーム) か、included_steps / "
+            "replaces_steps の配置ミス"
         )
     return issues, notes
 

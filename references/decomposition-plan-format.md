@@ -97,11 +97,12 @@ md の定型部はレンダラが生成するため、**architect の output tok
 - **Transforms (column-level)**:
   | op | column_name | to_caption | to_datatype |
   |---|---|---|---|
-  | rename | `[71773dea-8ab7-31a8-824e-1adaa86101a0]` | `workbook_repo_url` | — |
-  | cast | `[10f83648-b8ca-3e2d-bb8b-bb11e8a1ea7d]` | `view_count` | `real` |
+  | rename | `[71773dea-8ab7-31a8-824e-1adaa86101a0]` | `商談ID` | — |
+  | rename | `[5f21c0aa-93b8-3c11-8f60-1adaa8610b22]` | `単価 (USD)` | — |
+  | cast | `[10f83648-b8ca-3e2d-bb8b-bb11e8a1ea7d]` | `金額` | `real` |
   | hide | `[ac70859b-5363-33de-8121-d53b3836dc66]` | — | — |
 - **Description**:
-  Salesforce の Opportunity テーブルから列リネームと型キャストのみを行う。
+  Opportunity テーブルの UUID 列名を元の内部名にピン留め (`単価 (USD)` は actions-split で吸収した正規化)。semantic translation はしない。
 
 ### stg_snowflake__orders
 
@@ -161,7 +162,7 @@ stg レイヤの各 entry の取扱は、prep-extractor Phase B の **`input-dis
 
 - `Inputs` セクションに **vconn の display name と table name** を 1 行で明記 (例: `Source: Google Drive Tables (仮想接続) / Transactions`)。vconn LUID / table UUID は builder が flow.json から自動取得するので plan には書かなくて良い
 - `Transforms (column-level)` セクションを置く。`op` ∈ `{rename, cast, hide}`、`column_name` は `[<uuid>]` 形式 (元 Input ノードの `fields[].name` を bracket で囲んだもの)。op=rename/cast には `to_caption` 必須、cast には `to_datatype` 必須、hide は両方 `—`
-- 非 ASCII caption (日本語等) の `to_caption` は architect が semantic translation 提案 (`数量` → `quantity` 等)、ASCII caption は snake_case 化。Stop 2 で行単位にユーザー確認 / 上書き
+- **`to_caption` は元の内部名へのピン留めに限る** ([input-policy.md §命名レジーム](input-policy.md) が正典): 原則 = 現行 caption をそのまま (skeleton の初期値が正解)、例外 = actions-split で stg に吸収した正規化 rename (例: `単価 (Usd)` → `単価 (USD)`) の反映のみ。**英語等への semantic translation は禁止** — 下流の転写式が元名で列参照するため run が fail する
 - `Included original steps` と `Upstream lineage` は **省略可** (Transforms 表で element 単位を表現するため)
 - `Description` は引き続き必須
 
@@ -263,9 +264,11 @@ prep-builder の build 開始前に [`scripts/flow_io.py`](../scripts/flow_io.py
 
 ### Rename-back (mart 境界の presentation rename)
 
-**規範**: Output mapping に行を持つ mart (= 元 output を引き継ぐ mart) の出力 PDS は、**元 output PDS とスキーマ完全一致 (列名含む)** で publish する。stg/int で導入したエンジニアリング命名 (英語 snake_case) は内部命名であり、mart 境界で元の列名に戻す。理由: 既存 Workbook の field 束縛は名前ベースで、列名一致なら Replace Data Source がほぼ無風、かつ comparator の列比較が厳密一致で判定できる。
+**規範**: Output mapping に行を持つ mart (= 元 output を引き継ぐ mart) の出力 PDS は、**元 output PDS とスキーマ完全一致 (列名含む)** で publish する。理由: 既存 Workbook の field 束縛は名前ベースで、列名一致なら Replace Data Source がほぼ無風、かつ comparator の列比較が厳密一致で判定できる。
 
-該当 mart の entry には **Rename-back 表** を必須で置く:
+**命名レジーム ([input-policy.md §命名レジーム](input-policy.md)) の下では、この規範は自動達成され Rename-back は通常 no-op (空)**。元の内部名を end-to-end 保持していれば mart に到達する列名 = 元 output の列名だからで、表を書くのは **上流で divergent な forward rename を導入した例外ケースのみ**。
+
+該当ケースでは mart entry に **Rename-back 表** を置く:
 
 ```markdown
 - **Rename-back (presentation rename)**:
@@ -275,16 +278,16 @@ prep-builder の build 開始前に [`scripts/flow_io.py`](../scripts/flow_io.py
   | settlement_date_買付 | 約定日_買付 |
 ```
 
-生成則:
+生成則 (divergent rename がある場合のみ):
 
-- **architect 自身が導入した順方向 rename (stg 翻訳 + 翻訳済み派生列) の逆写像** を、その mart に到達する列へ適用する。元 PDS の実スキーマを外部照会する必要はない
+- **architect 自身が導入した順方向 rename の逆写像** を、その mart に到達する列へ適用する。元 PDS の実スキーマを外部照会する必要はない
 - **サフィックスは保存する**: 基底名だけ逆写像し、元フローの actions が付けたサフィックス (`_買付` / `_売付` 等) は温存 (`settlement_date_買付` → `約定日_買付`)
-- rename を経ていない列 (元から英語の列、下流計算で生まれた列) は表に載せない
+- rename を経ていない列は表に載せない
 - 取りこぼしは comparator の厳密一致チェックで gap として発覚する (フィードバックループ)
 
 実装は prep-builder が「最終ノードと PublishExtract Output の間に rename-back SuperTransform を挿入」で行う ([../.claude/skills/prep-builder/references/build-recipe.md](../.claude/skills/prep-builder/references/build-recipe.md))。
 
-**例外**: 元 output と対応の無い新規 mart (Output mapping に行が無い) は rename-back 不要で、エンジニアリング命名のまま publish してよい。既存消費者を持たないため。
+**例外**: 元 output と対応の無い新規 mart (Output mapping に行が無い) は本規範の対象外 (既存消費者を持たないため)。
 
 ### Target Tableau Cloud project layout
 

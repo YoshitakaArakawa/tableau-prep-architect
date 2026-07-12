@@ -30,7 +30,7 @@ Tableau Prep のフローを dbt 流のレイヤ規律（stg / intermediate / ma
 | `mode` | ✅ | `analyze` / `decompose` / `both` |
 | `flow_summary_path` | ✅ | prep-extractor が出力した `flow-summary.md` のパス |
 | `deploy_context_path` | decompose で推奨 | prep-extractor Phase B の `deploy-context.md`。既存 flow 名衝突回避 + passthrough Input の PDS LUID 解決に使う |
-| `input_dispatch_mech_path` | decompose で **必須** | prep-extractor Phase B の `input-dispatch-mech.json`。各 Input の kind / fields / 解決済 LUID を読み、policy 提案 + rename 翻訳 + provisioning 案を decompose 内で組み立てる |
+| `input_dispatch_mech_path` | decompose で **必須** | prep-extractor Phase B の `input-dispatch-mech.json`。各 Input の kind / fields / 解決済 LUID を読み、policy 提案 + stg rename (元名ピン留め) + provisioning 案を decompose 内で組み立てる |
 | `analysis_path` | decompose のみで使うなら | analyze 結果がある場合のみ |
 | `flow_dependencies_path` | 任意 (複数フロー移行時に推奨) | prep-extractor Phase C の `flow-dependencies.md`。pds 入力の出所分類 (in-scope 出力 = 暫定 passthrough) と stg 再利用判断 (self-check 項目 15) に使う。無ければ deploy-context から推定し `未確認` ラベル |
 | `output_dir` | ✅ | `analysis-<flow>.md` / `decomposition-plan-<flow>.json` + `.md` の出力先 (典型: `work/<yyyymmdd>_<tag>/reports/`)。レポート類は [CLAUDE.md §work/ ディレクトリ規約](../../../CLAUDE.md#work-ディレクトリ規約) の `reports/` に集約 |
@@ -57,17 +57,17 @@ analyze の結果と `input-dispatch-mech.json` を基に、分解設計を **`d
 |---|---|
 | 入力 | `flow-summary.md`, `analysis-<flow-name>.md`, `input-dispatch-mech.json`, `deploy-context.md`, 元 .tfl/.tflx (スクリプト入力としてのみ — 本文は読まない) |
 | 出力 | `decomposition-plan-<flow>.json` (設計の正) + `decomposition-plan-<flow>.md` (レンダリング産物、書式: [../../../references/decomposition-plan-format.md](../../../references/decomposition-plan-format.md)) |
-| 主な判断 | レイヤ分割、actions レベル分割、移行順序、**stg policy + Materialization** (mech findings から導出)、**Input rename 翻訳** (非 ASCII caption の semantic translation を含む)、**mart Rename-back** (元 output を引き継ぐ mart の出力列名を元 output PDS と完全一致させる) |
+| 主な判断 | レイヤ分割、actions レベル分割、移行順序、**stg policy + Materialization** (mech findings から導出)、**stg rename の元名ピン留め** (semantic translation は禁止 — [../../../references/input-policy.md §命名レジーム](../../../references/input-policy.md))、**mart 列名 parity** (命名レジーム下で自動達成、divergent rename 導入時のみ Rename-back) |
 | 主な参照 | [../../../references/layer-responsibilities.md](../../../references/layer-responsibilities.md), [references/intermediate-decomposition.md](references/intermediate-decomposition.md), [references/review-checkpoints.md](references/review-checkpoints.md), [../../../references/naming-conventions.md](../../../references/naming-conventions.md), [../../../references/input-policy.md](../../../references/input-policy.md), [../../../references/project-hierarchy.md](../../../references/project-hierarchy.md) |
 
 手順 (LUID / path / transforms 表の手書きは廃止 — 機械部分はスクリプトが埋める):
 
 1. **skeleton 生成**: `python ${CLAUDE_SKILL_DIR}/scripts/gen_plan_skeleton.py --source <元.tfl> --input-dispatch <input-dispatch-mech.json> --deploy-context <deploy-context.md> --out <output_dir>/decomposition-plan-<flow>.json` — server / プロジェクト LUID / 元 outputs / vconn stg entry (transforms 事前充填) / passthrough hint / needs_provisioning entry が埋まった状態で出る
-2. **設計フィールドを記入** (Edit): int / marts の entry (`included_steps` / `splits` / `inputs` / `rename_back` / `joins` / `description` / `source_original_output_name`)、stg の rename 翻訳 (`to_caption`)。step 番号は flow-summary の Topology 表と同一。書き終えたら `_` 始まりのキーを全削除
+2. **設計フィールドを記入** (Edit): int / marts の entry (`included_steps` / `splits` / `inputs` / `rename_back` / `joins` / `description` / `source_original_output_name`)、stg の `to_caption` は skeleton 初期値 (現行 caption) を維持し、actions-split で吸収した正規化のみ上書き。step 番号は flow-summary の Topology 表と同一。書き終えたら `_` 始まりのキーを全削除
 3. **self-check**: [references/decompose-self-check.md](references/decompose-self-check.md) を Read して全項目を通す (lineage 到達性・step 範囲・配線可能性は次の render が機械検証するので、self-check は業務判断系の項目に集中する)
 4. **検証 + レンダリング**: `python ${CLAUDE_SKILL_DIR}/scripts/render_plan_md.py --plan <plan.json> --source <元.tfl> -o <output_dir>/decomposition-plan-<flow>.md` — 検証エラーが出たら plan.json を修正して再実行 (エラーのまま md を手書きで補わない)
 
-**`input-dispatch-mech.json` の各 Input record から plan を組み立てるルール** は [../../../references/decomposition-plan-format.md §Input dispatch と stg materialization](../../../references/decomposition-plan-format.md) を正典として従う (kind → policy 対応の要点: `pds` resolved → `passthrough` / `pds` ambiguous・unresolved → `augment` 暫定 + Stop 2 で disambiguate / `vconn` → `augment` + `Materialization: live_pds` + rename 翻訳 / `direct_db`・`extract` → `needs_provisioning` + provisioning 案)。`unknown` は extractor 側で raise されるため本 Skill 起動時には存在しない前提。record の JSON スキーマは [../prep-extractor/references/input-dispatch-format.md](../prep-extractor/references/input-dispatch-format.md)。
+**`input-dispatch-mech.json` の各 Input record から plan を組み立てるルール** は [../../../references/decomposition-plan-format.md §Input dispatch と stg materialization](../../../references/decomposition-plan-format.md) を正典として従う (kind → policy 対応の要点: `pds` resolved → `passthrough` / `pds` ambiguous・unresolved → `augment` 暫定 + Stop 2 で disambiguate / `vconn` → `augment` + `Materialization: live_pds` + rename ピン留め / `direct_db`・`extract` → `needs_provisioning` + provisioning 案)。`unknown` は extractor 側で raise されるため本 Skill 起動時には存在しない前提。record の JSON スキーマは [../prep-extractor/references/input-dispatch-format.md](../prep-extractor/references/input-dispatch-format.md)。
 
 ## How to invoke
 

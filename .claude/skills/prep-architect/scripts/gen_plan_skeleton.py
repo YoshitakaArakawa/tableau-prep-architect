@@ -138,9 +138,14 @@ def main() -> int:
                     for c in cols
                 ],
                 "description": "TODO: 1-2 lines",
-                "_todo": "Rename this stg; TRANSLATE to_caption values "
-                         "(semantic English snake_case for non-ASCII captions); "
-                         "drop transforms for columns kept as-is; add cast/hide "
+                "_todo": "Rename this stg. to_caption values are pre-filled with "
+                         "the CURRENT captions — keep them as-is (naming regime: "
+                         "original internal names end-to-end, see "
+                         "references/input-policy.md). Only overwrite a to_caption "
+                         "when an actions-split absorbs a normalization rename "
+                         "into this stg. NEVER translate captions to English — "
+                         "downstream transcribed expressions reference the "
+                         "original names and would fail at run. Add cast/hide "
                          "ops only if the design needs them.",
             })
         elif kind == "pds":
@@ -201,8 +206,9 @@ def main() -> int:
             "Schema: references/plan-json-schema.md",
             "Set source_original_output_name on every entry that inherits an "
             "original output (drives Output mapping + comparator pairing)",
-            "Marts inheriting an original output need rename_back so the output "
-            "schema matches the original PDS exactly",
+            "rename_back stays EMPTY under the naming regime (original names "
+            "end-to-end => mart parity is automatic); fill it only when a "
+            "divergent forward rename was deliberately introduced upstream",
             "When done: delete every _-prefixed key, then run render_plan_md.py "
             "(it validates the plan and writes the Stop-2 review markdown)",
         ],

@@ -28,6 +28,18 @@ dbt の `sources` 概念に相当。
 - **rename**: vconn source の true rename (local-name 書き換え + `<cols><map>`) でのみ成立。caption-only rename の stg は下流 run が "Unknown field name" で fail する。semantics の詳細は prep-pds-augmenter SKILL.md 参照
 - **cast / hide**: 下流 Prep から見た挙動は **未検証**。Prep 消費前提の stg にこれらの op を含める場合は Stop 2 で未検証リスクとして明示し、検証を挟むか実 .tfl 化を検討する
 
+## 命名レジーム: 元の内部名を end-to-end 保持 (正典)
+
+分解後の各層が公開する列名は **元フローの内部名 (post-Input 命名。actions-split で stg に吸収した正規化 rename を含む) をそのまま保持** する。stg / int の列名を英語等へ意訳する semantic translation は **行わない**。
+
+理由は build の転写モデルと束縛層の掛け算:
+
+1. prep-builder (`build_from_plan.py`) は下流ノードを **式ごと verbatim 転写し、列参照を書き換えない**。転写式は列を元の内部名で参照するため、上流 PDS が別名 (英語等) を公開すると下流 run が "Unknown field name" で fail する
+2. ある層の英語化は「下流式の全 rewrite」(AddColumn 式 / Filter 式 / LOD の PARTITION・ORDERBY / Join clause / サフィックス派生列) を要求し、決定論的 verbatim 転写というパイプラインの設計意図と両立しない。列参照 rewriter は実装しない (非採用)
+3. 「caption だけ英語・内部名は元のまま」の折衷も **非成立** (検証済み): 上記のとおり下流 Prep は local-name で束縛し caption を見ないため、下流から英語名は見えない
+
+この regime では: 元 output を引き継ぐ mart の列名 parity は **自動達成** され、Rename-back は上流で divergent な forward rename を導入した場合 (原則発生しない) のみ必要になる。BI 向けの表示名変更は mart 境界より下流 (PDS の caption / Workbook 側) で行う。
+
 ## 違反の判定例
 
 | Input 種別 | nodeType | 判定 |
