@@ -337,10 +337,40 @@ def build_tfl(entry: dict, resolver: StepResolver, plan: dict,
     return path, issues
 
 
+def find_placeholder_projects(plan: dict) -> list[str]:
+    """Return group.layer keys whose path/luid are still gen_plan_skeleton's
+    TODO placeholders. Placeholders present == the plan predates
+    preflight + Phase B re-run (0c'), so none of its baked LUIDs are real."""
+    found = []
+    for grp in ("flow_projects", "ds_projects"):
+        for layer, ref in (plan.get(grp) or {}).items():
+            vals = (ref.get("path", ""), ref.get("luid", ""))
+            if any(str(v).startswith("TODO") for v in vals):
+                found.append(f"{grp}.{layer}")
+    return found
+
+
 def main() -> int:
     args = parse_args()
     plan = load_plan(args.plan)
     out_dir = Path(args.output_dir)
+
+    placeholders = find_placeholder_projects(plan)
+    if placeholders:
+        if args.manifest:
+            print("[build] ERROR: plan still contains TODO placeholder project "
+                  f"LUIDs ({', '.join(placeholders)}) — a --manifest build is "
+                  "publish-bound and would bake unpublishable Outputs.\n"
+                  "  Fix: run prep-deployer preflight, re-run prep-extractor "
+                  "Phase B (0c'), then re-run gen_plan_skeleton or copy the "
+                  "layer LUIDs into the plan's flow_projects/ds_projects.\n"
+                  "  Or: drop --manifest for a local-only (goal 3) build.",
+                  file=sys.stderr)
+            return 1
+        print("[build] WARNING: TODO placeholder project LUIDs in "
+              f"{', '.join(placeholders)} — outputs are local-only and NOT "
+              "publishable (goal 3). Promote to publish via preflight -> "
+              "Phase B re-run -> plan LUID update -> rebuild with --manifest.")
 
     source = load_flow_json(args.source)
     source, skipped = normalize_source_containers(source)

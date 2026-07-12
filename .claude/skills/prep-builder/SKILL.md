@@ -75,7 +75,7 @@ python ${CLAUDE_SKILL_DIR}/scripts/build_from_plan.py \
 
 このコマンドが行うこと (詳細な変換規則は [references/build-recipe.md](references/build-recipe.md) と [plan-json-schema.md §配線の導出規則](../../../references/plan-json-schema.md)):
 
-1. plan.json の構造検証 + 元フローとの整合検証 (step 範囲 / total_nodes / 配線可能性 / lineage closure)。エラーなら build せず終了
+1. plan.json の構造検証 + 元フローとの整合検証 (step 範囲 / total_nodes / 配線可能性 / lineage closure)。エラーなら build せず終了。**placeholder ガード**: `flow_projects` / `ds_projects` に gen_plan_skeleton の TODO placeholder が残る plan は、`--manifest` 指定 (publish 前提) なら build せず fail (preflight → Phase B 再実行 → plan の LUID 更新が必要)。`--manifest` 無しなら WARNING で許容 — goal ③ のローカル build で、生成 .tfl は publish 不可
 2. 各 plan entry を kind dispatch:
    - `input_status: needs_provisioning` → **build を skip**、manifest に `status: skipped_pending_provisioning` で登録。下流 int/marts はそのまま build (run 時に該当 stg PDS 不在で fail するのは正常な escalation 経路)
    - `kind: pds_augment` (stg のみ) → `inspect_input_node()` で vconn 再検証 (非 vconn は中断 + escalation)、[prep-pds-augmenter](../prep-pds-augmenter/SKILL.md) spec を `flows/staging/<name>.augmenter.json` に emit (.tfl は作らない)
