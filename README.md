@@ -47,7 +47,7 @@ dbt のベストプラクティスを Prep に転用しますが、Tableau Workb
 
 ## 含まれる Skill / Workflow
 
-このリポジトリは 11 の Skill (`prep-migrate` / `prep-extractor` / `prep-architect` / `prep-builder` / `prep-deployer` / `prep-output-comparator` / `prep-pds-augmenter` / `prep-schedule-designer` / `prep-workbook-repointer` / `prep-pds-backfiller` / `prep-migration-planner`) で構成されています。Workflow 全体図・Session intake・起動順序は entry-point skill [prep-migrate](.claude/skills/prep-migrate/SKILL.md)、各 Skill の役割と副作用区分は [CLAUDE.md](CLAUDE.md#skill-構成) にまとめてあります（どちらも Agent 起動時に自動ロードされます）。
+このリポジトリは 11 の Skill (`prep-migrate` / `prep-extractor` / `prep-architect` / `prep-builder` / `prep-deployer` / `prep-output-comparator` / `prep-pds-augmenter` / `prep-schedule-designer` / `prep-workbook-repointer` / `prep-pds-backfiller` / `prep-migration-planner`) で構成されています。Workflow 全体図・Session intake・起動順序は entry-point skill [prep-migrate](.claude/skills/prep-migrate/SKILL.md)、各 Skill の役割と副作用区分は [CLAUDE.md](CLAUDE.md#skill-構成) にまとめてあります（CLAUDE.md は Agent 起動時に自動ロードされ、prep-migrate は移行系の依頼を受けたセッション冒頭に CLAUDE.md の起動規則で invoke されます）。
 
 `prep-migrate` は移行セッションの **entry-point** で、ユーザーが分析・分解・移行・publish・比較・スケジュール・repoint・backfill を依頼したときにセッション冒頭で起動され、intake (Q1-Q5)・workflow・停止点 (Stop 1/2) の手順に沿って他の Skill を正しい順序で呼び出します。フロー内設計 (`prep-architect`) やセッション横断の計画台帳 (`prep-migration-planner`) には踏み込みません。
 
