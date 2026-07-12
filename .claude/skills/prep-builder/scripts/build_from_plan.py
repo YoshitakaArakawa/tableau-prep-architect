@@ -209,10 +209,28 @@ def build_tfl(entry: dict, resolver: StepResolver, plan: dict,
                 project_name = plan["ds_projects"][up_layer]["path"]
                 dbname = None  # placeholder; deployer patches after upstream run
                 fields = upstream_lsp_fields(inp["pds_name"], plan, resolver)
-            else:  # passthrough_pds — pre-existing PDS, Tableau stores the leaf
-                project_name = inp["project_path"].split("/")[-1]
+            else:  # passthrough_pds — pre-existing PDS at a known project path.
+                # Emit the FULL path (not the leaf). The deployer's dbname-patch
+                # tooling (discover_pds_dbname / auto_patch_downstream) matches
+                # LoadSqlProxy nodes by EXACT projectName against the full path,
+                # so a leaf here makes those patches silently match nothing
+                # (observed 20260712 #7). A full-path projectName publishes and
+                # runs on Cloud — the upstream_pds branch above has always
+                # emitted full paths that publish + run.
+                project_name = inp["project_path"]
                 dbname = inp.get("dbname")
                 fields = []
+                if not dbname:
+                    print(
+                        f"[build] WARNING: {name}: passthrough_pds input "
+                        f"{inp['pds_name']!r} has no dbname in the plan — "
+                        "emitting a placeholder. The deployer must resolve + "
+                        "patch it before run (auto_patch_downstream); this now "
+                        "works because projectName is the full path. Add the "
+                        "input's dbname to the plan (input-dispatch pds.dbname) "
+                        "to skip that round-trip entirely.",
+                        file=sys.stderr,
+                    )
             lsp_id, _ = add_pds_input(
                 flow, server_url=server_url, site_url_name=site,
                 project_name=project_name, datasource_name=inp["pds_name"],
