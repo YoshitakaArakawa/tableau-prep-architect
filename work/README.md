@@ -39,7 +39,7 @@ work/
 
 | サブフォルダ | 入れるもの | 入れないもの |
 |---|---|---|
-| `reports/` | prep-extractor の `flow-summary.md` / `deploy-context.md`、prep-architect の `analysis-*.md` / `decomposition-plan-*.md`、prep-builder/deployer の `publish-manifest.json`、prep-output-comparator の `comparison-report.md` / `pairs.json` | スクリプト、.tfl |
+| `reports/` | prep-extractor の `flow-summary.md` / `deploy-context.md` / `flow-dependencies.md`、prep-migration-planner の `migration-plan.md` / `migration-plan.json`、prep-architect の `analysis-*.md` / `decomposition-plan-*.md`、prep-builder/deployer の `publish-manifest.json`、prep-output-comparator の `comparison-report.md` / `pairs.json` | スクリプト、.tfl |
 | `flows/` | prep-builder の `staging/*.tfl` / `intermediate/*.tfl` / `marts/*.tfl` | レポート、試行錯誤の .tfl |
 | `scripts/` | **公式の再生成スクリプト** (例: `build_tfls.py` — このセッションの .tfl 群を再ビルドできるもの)。冪等で再実行可能 | 1 回限りの修正試行・実験 |
 | `scratch/` | 試行錯誤・使い捨ての py / メモ (例: `patch_target_path.py`, 検証用 `regression_test_*.py`) | 後段の Skill が依存するスクリプト |

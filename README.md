@@ -1,6 +1,6 @@
 # tableau-prep-architect
 
-Tableau Prep の長大フローを、dbt 流のレイヤ規律で分解・再構築するための Claude Code エージェントです (8 つの Skill が連携し、Cloud publish と元フローとの parity 比較まで自律実行・回復します)。
+Tableau Prep の長大フローを、dbt 流のレイヤ規律で分解・再構築するための Claude Code エージェントです (10 の Skill が連携し、Cloud publish と元フローとの parity 比較、さらにスケジュール設計・Workbook 参照置換まで支援します)。
 
 ## これは何か
 
@@ -47,13 +47,17 @@ dbt のベストプラクティスを Prep に転用しますが、Tableau Workb
 
 ## 含まれる Skill / Workflow
 
-このリポジトリは 8 つの Skill (`prep-extractor` / `prep-architect` / `prep-builder` / `prep-deployer` / `prep-output-comparator` / `prep-pds-augmenter` / `prep-schedule-designer` / `prep-pds-backfiller`) で構成されています。Workflow 全体図、各 Skill の役割と副作用区分、起動順序は [CLAUDE.md](CLAUDE.md#workflow) にまとめてあります（Agent 起動時に自動ロードされる真の source です）。
+このリポジトリは 10 の Skill (`prep-extractor` / `prep-architect` / `prep-builder` / `prep-deployer` / `prep-output-comparator` / `prep-pds-augmenter` / `prep-schedule-designer` / `prep-workbook-repointer` / `prep-pds-backfiller` / `prep-migration-planner`) で構成されています。Workflow 全体図、各 Skill の役割と副作用区分、起動順序は [CLAUDE.md](CLAUDE.md#workflow) にまとめてあります（Agent 起動時に自動ロードされる真の source です）。
 
 うち `prep-pds-augmenter` は他 Skill から呼ばれる横断ユーティリティで、Published Data Source の column-level 改変 (rename / cast / hide) + Calculated Field 注入を担います。stg レイヤを .tfl ではなく Live PDS で表現するときに使われます。
 
 `prep-schedule-designer` は移行後の新フロー群の定期実行 (Linked Task) を設計・検証する読み取り専用 Skill です。Linked Task は Cloud UI 専用で REST 作成できないため、人間が UI でセットアップするための設計資料を出し、作成後にサーバー実測と突合します。
 
+`prep-workbook-repointer` は移行後、旧 PDS を参照する Workbook を新 marts PDS へ差し替えるための設計資料を出し、人間の Tableau Desktop での Replace Data Source 後に lineage 反映を検証する読み取り専用 Skill です。
+
 `prep-pds-backfiller` は移行完了後の**任意の後工程**です。incremental フローを分解すると新しい accumulator PDS は最新バッチしか持たないため、旧 output PDS にしか残っていない過去の累積履歴を hyper-level surgery で一度だけ seed します。取り消しにくい本番 Overwrite を含むので、dry-run → sandbox preview → 明示承認 → 本番 → 受け入れ incremental の段取りゲートを踏みます。
+
+`prep-migration-planner` は複数フロー or 横断工程 (スケジュール / repoint / backfill) を含む移行の scope・移行順・人間作業キュー・進捗を 1 枚に集約するオーケストレーション台帳 (migration-plan.md + .json) を生成・更新します。フロー内設計には踏み込まず、セッション横断の resume state も兼ねます。
 
 ## 既知の制限
 
