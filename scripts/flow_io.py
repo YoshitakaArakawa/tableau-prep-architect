@@ -704,6 +704,83 @@ def set_incremental_refresh(
     }
 
 
+def get_incremental_config(flow: dict[str, Any]) -> dict[str, Any]:
+    """Read incremental refresh / append configuration from a flow (inverse of
+    set_incremental_refresh).
+
+    Scans flow["nodeProperties"] and returns:
+
+        {
+          "incremental_configs": [   # one per input node carrying the key
+            {
+              "input_node_id": str,
+              "incremental_enabled": bool,
+              "control_field": str | None,
+              "output_node_id": str | None,
+              "output_field": str | None,
+              "inert": bool,   # enabled but control_field/output_node_id empty
+            }, ...
+          ],
+          "output_refresh_options": [  # one per output node carrying the key
+            {
+              "output_node_id": str,
+              "output_operation_type": str | None,
+              "incremental_output_operation_type": str | None,
+              "is_incremental_default": bool | None,
+            }, ...
+          ],
+          "run_type": "incremental" | "full",
+          "control_fields": [str, ...],  # of effective (non-inert) configs
+        }
+
+    `run_type` is "incremental" iff at least one non-inert enabled config
+    exists AND some output has append operation type — the combination that
+    makes a full run duplicate the output, i.e. the flow must be scheduled
+    with run-type Incremental. Configs with `incrementalEnabled: true` but
+    empty controlFieldName/outputNodeId are UI residue that Prep ignores;
+    they are reported with `inert: true` and excluded from the verdict.
+    """
+    props = flow.get("nodeProperties") or {}
+    incr_configs: list[dict[str, Any]] = []
+    refresh_opts: list[dict[str, Any]] = []
+    for node_id, entry in props.items():
+        if not isinstance(entry, dict):
+            continue
+        ic = entry.get(INCREMENTAL_CONFIG_KEY)
+        if isinstance(ic, dict):
+            control = ic.get("controlFieldName") or None
+            out_node = ic.get("outputNodeId") or None
+            enabled = bool(ic.get("incrementalEnabled"))
+            incr_configs.append({
+                "input_node_id": node_id,
+                "incremental_enabled": enabled,
+                "control_field": control,
+                "output_node_id": out_node,
+                "output_field": ic.get("outputFieldName") or None,
+                "inert": enabled and not (control and out_node),
+            })
+        oro = entry.get(OUTPUT_REFRESH_OPTIONS_KEY)
+        if isinstance(oro, dict):
+            refresh_opts.append({
+                "output_node_id": node_id,
+                "output_operation_type": oro.get("outputOperationType"),
+                "incremental_output_operation_type": oro.get("incrementalOutputOperationType"),
+                "is_incremental_default": oro.get("isIncrementalDefault"),
+            })
+    effective = [c for c in incr_configs if c["incremental_enabled"] and not c["inert"]]
+    has_append = any(
+        o.get("output_operation_type") == "outputOperationTypeAppend"
+        or o.get("incremental_output_operation_type") == "outputOperationTypeAppend"
+        for o in refresh_opts
+    )
+    return {
+        "incremental_configs": incr_configs,
+        "output_refresh_options": refresh_opts,
+        "run_type": "incremental" if (effective and has_append) else "full",
+        "control_fields": sorted({c["control_field"] for c in effective}),
+    }
+
+
 def verify_lineage_closure(
     new_flow: dict[str, Any],
     source_flow: dict[str, Any],
