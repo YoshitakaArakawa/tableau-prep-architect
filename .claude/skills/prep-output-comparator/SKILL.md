@@ -97,6 +97,8 @@ dimension 列の選び方は [references/mcp-query-recipes.md](references/mcp-qu
 
 クエリの具体形は [references/mcp-query-recipes.md §期間一致カウントのレシピ](references/mcp-query-recipes.md)。レポートには使用した control field とレンジ (min/max) を必ず記載する。
 
+**backfill 後の parity**: 継承層 accumulator に [prep-pds-backfiller](../prep-pds-backfiller/SKILL.md) で旧履歴を seed した後は、`append_originals` の期間一致は不要になり **全期間の行数 parity が再び有効**になる (期間一致は backfill 前の暫定手段)。挿入行は旧行の逐語コピーなので値同値も構造的に保証される。
+
 ### Step 4: パターンフラグ検出
 
 機械的に判定できる「観察事実」のフラグを立てる (原因分析はしない):

@@ -125,8 +125,8 @@ flow-summary.md の Meta に `Incremental inputs` / `Append-mode outputs` 行が
 
 - **継承層 = int (既定)**: append + incremental は「incremental source を読み append Output を出す .tfl」に置く。stg は live_pds で Output を持たないため既定は int (insert-only は集約前の層でのみ正しく、履歴が 1 か所に集約され marts は full-refresh で idempotent)。**int 層が無い分解 (stg→mart 直結) でのみ mart** が継承層になる (選好ではなく置き場の機械的帰結)。継承層の .tfl は incremental Input と append Output を同居させる (Prep の watermark は同一 .tfl 内ペアでのみ機能)。引き継がない場合は根拠と履歴非蓄積の影響を書く
 - **Rename-back とは別レイヤ判断**: accumulator を int に置いても、列名 parity の Rename-back / Output mapping は mart のまま (int は内部命名で累積、mart が full-refresh で presentation-rename)
-- **履歴 backfill はスコープ外**: 既定は旧 output PDS をアーカイブ残置し継承層は baseline 以降を前方累積。履歴が硬要件なら旧 PDS からの seed を手動工程として plan に明記しユーザーへ escalate (Agent は自動化しない)
-- **parity 検証方法の切り替え**: 全体行数一致は原理的に成立しない。Output mapping 近くに「compare は control field (例: `Date`) の期間一致で行う」と明記し、control field 名を plan に書く (comparator への引き渡し情報)
+- **履歴 backfill は分解のスコープ外 (別 Skill が担う)**: 分解時の既定は旧 output PDS をアーカイブ残置し継承層は baseline 以降を前方累積。履歴が硬要件なら、移行後の別工程 [prep-pds-backfiller](../../prep-pds-backfiller/SKILL.md) が旧 PDS から seed する (分解の自動一気通貫には含めず、ユーザー明示要求 + 段取りゲート付き)。plan には baseline-forward の帰結 (下流の履歴依存計算が当面劣化しうる) を明記する
+- **parity 検証方法の切り替え**: 全体行数一致は (backfill 前は) 成立しない。Output mapping 近くに「compare は control field (例: `Date`) の期間一致で行う」と明記し、control field 名を plan に書く (comparator への引き渡し情報)。backfill 実施後は全期間の行数 parity が再び有効になる
 
 これらは業務判断を含むため **Stop 2 の Tier 1 に必ず載せる**。省くと compare が false FAIL を出し、原因調査の手戻りになる。
 
