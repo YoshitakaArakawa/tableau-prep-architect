@@ -87,7 +87,7 @@ status 値は `pending` / `in_progress` / `done` / `fail` / `partial` / `n/a`。
 
 ## フィールド詳細
 
-- **meta.goal_stage**: init_plan の `--goal <1-7>` を表示ラベルに変換して格納。判定ロジックは human_queue 構成に使う整数を別途参照しない (human_queue は init 時に確定済み)。
+- **meta.goal_stage**: init_plan の `--goal <1-5>` (Q2a 深度) を表示ラベルに変換して格納。判定ロジックは human_queue 構成に使う整数を別途参照しない (human_queue は init 時に確定済み)。
 - **migration_order.order**: 複数フローは `flow-dependencies.json` の `topological_order` を採用 (producer 先行)。順序の**採否**は決定 (Stop 1 で追認)、値の出所はファクト (`source` にポインタ)。
 - **backfill_candidates**: 各 in-scope フローの facts の `incremental` オブジェクト (`{run_type, control_fields}` のネスト形) から機械抽出。`incremental.run_type == "incremental"` の flow のみ候補化し、`control_field` は `incremental.control_fields[0]`。出力エントリ自体は flat (`{flow, control_field, applicable, mode, reason}`)。`mode` は init では常に `null` (compare 後にユーザーが seam/replace を決める)。
 - **trigger_policy**: 散文文字列を基本とする (prep-schedule-designer の `trigger_policy` 引数と同じ散文契約)。構造化 dict `{tz, domains:[{name, weekday_constraint}]}` も許容し、render_migration_plan.py は両対応。

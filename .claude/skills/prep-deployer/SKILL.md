@@ -5,7 +5,7 @@ description: prep-builder が生成した .tfl 群を Tableau Server/Cloud に p
 
 # prep-deployer
 
-prep-builder が組み立てた .tfl 群を Tableau Server/Cloud に届け、運用副作用 (preflight / publish / run) を扱う Skill。**session intake ([prep-migrate §Session intake](../prep-migrate/SKILL.md#session-intake-step-0)) で goal (Q2) と target path (Q4) が合意済みの前提で、書き込み操作は承認プロンプトを出さずに自律実行する**。失敗は [autonomous-recovery](references/autonomous-recovery.md) のマッピングで分類し、回復可能なら自動リトライ、回復不能なら escalation。
+prep-builder が組み立てた .tfl 群を Tableau Server/Cloud に届け、運用副作用 (preflight / publish / run) を扱う Skill。**session intake ([prep-migrate §Session intake](../prep-migrate/SKILL.md#session-intake-step-0)) で goal (Q2a) と target path (Q4) が合意済みの前提で、書き込み操作は承認プロンプトを出さずに自律実行する**。失敗は [autonomous-recovery](references/autonomous-recovery.md) のマッピングで分類し、回復可能なら自動リトライ、回復不能なら escalation。
 
 本 Skill は `context: fork` を **付けない**。理由は publish / run の失敗を主会話で観測し、recovery ループの最終 escalation を主会話に報告する必要があるため。
 
@@ -100,7 +100,7 @@ run 1 件ごとに [scripts/publish_manifest.py update-run](../../../scripts/pub
 
 ## 実行ポリシー (最重要)
 
-1. **承認は session intake で取り切る** — Q2 (goal) と Q4 (target path) が合意された時点で publish / run を一気通貫で実行
+1. **承認は session intake で取り切る** — Q2a (goal) と Q4 (target path) が合意された時点で publish / run を一気通貫で実行
 2. **失敗は自律ループで回復を試みる** — [autonomous-recovery](references/autonomous-recovery.md) の symptom→fix マッピングで分類、リトライ上限内で再試行
 3. **回復不能種別は即 escalation** — 認証 / 権限 / 容量 / Cloud 障害 / loop 検知発火は AI では直せないので主会話に報告
 4. **自動ロールバックはしない** — Tableau Cloud のバージョン履歴から手動で戻す方が監査ログがクリーン
