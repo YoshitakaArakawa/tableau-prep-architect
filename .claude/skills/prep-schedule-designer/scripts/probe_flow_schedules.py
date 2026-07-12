@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Read-only probe of flow scheduling state on Tableau Server/Cloud.
 
-Answers, before designing (Phase A) and before verifying (Phase C):
+Answers, before designing (design mode Step 2) and before verifying (verify mode):
 
   1. Which runFlow tasks exist, and are any already attached to our target
      flows (schedule collisions)?
@@ -115,16 +115,17 @@ def list_linked_tasks(server: Any) -> list[dict[str, Any]]:
 def find_stale_lookalikes(server: Any, targets: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Server flows that could be mistaken for a target flow in the UI picker.
 
-    Flags: (a) same name, different LUID; (b) same layer prefix (stg/int/fct)
-    AND same final underscore-token but not a target itself (advisory — catches
-    stale pipeline generations like <prefix>_old_entity_<same-suffix>).
+    Flags: (a) same name, different LUID; (b) same layer prefix
+    (stg/int/fct/dim/rpt, per naming-conventions.md) AND same final
+    underscore-token but not a target itself (advisory — catches stale
+    pipeline generations like <prefix>_old_entity_<same-suffix>).
     """
     target_by_luid = {t["flow_luid"]: t for t in targets if t.get("flow_luid")}
     target_names = {t["name"] for t in targets}
 
     def key(name: str) -> tuple[str, str] | None:
         parts = name.split("_")
-        if len(parts) < 2 or parts[0] not in ("stg", "int", "fct"):
+        if len(parts) < 2 or parts[0] not in ("stg", "int", "fct", "dim", "rpt"):
             return None
         return (parts[0], parts[-1])
 

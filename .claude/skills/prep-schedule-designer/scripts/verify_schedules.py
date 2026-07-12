@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Verify UI-created Linked Tasks against the schedule design (Phase C).
+"""Verify UI-created Linked Tasks against the schedule design (verify mode).
 
-Compares `schedule-design.json` (written in Phase B, schema in
+Compares `schedule-design.json` (written in design mode, schema in
 references/runbook-format.md) with the live server state read via
 probe_flow_schedules.py's endpoints, and writes a Markdown report.
 
@@ -142,7 +142,7 @@ def render_report(results: list[dict[str, Any]],
     if old_rows:
         lines += ["## Old schedules slated for removal (current state)", ""]
         lines += ["| id | name | state |", "|---|---|---|"]
-        lines += [f"| `{o['id']}` | {o.get('name','')} | {o.get('state','(not found)')} |" for o in old_rows]
+        lines += [f"| `{o['id']}` | {o.get('name','')} | {o.get('state') or '(not found)'} |" for o in old_rows]
         lines.append("")
 
     lines += [
@@ -166,7 +166,7 @@ def render_report(results: list[dict[str, Any]],
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--design", required=True, help="schedule-design.json (Phase B output)")
+    ap.add_argument("--design", required=True, help="schedule-design.json (design-mode output)")
     ap.add_argument("--out", required=True, help="markdown report output path")
     args = ap.parse_args()
 

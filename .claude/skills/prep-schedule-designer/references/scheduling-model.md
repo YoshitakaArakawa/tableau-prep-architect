@@ -71,7 +71,7 @@ PDS lineage の **topological sort** を満たした上で:
 
 ## 検証の限界と挙動ベース検証
 
-Phase C（verify_schedules.py）で機械突合できるもの / できないもの:
+verify モード（verify_schedules.py）で機械突合できるもの / できないもの:
 
 | 項目 | 機械検証 | 手段 |
 |---|---|---|

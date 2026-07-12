@@ -2,7 +2,7 @@
 """Collect schedule-design inputs from session manifests + decomposed .tfl files.
 
 Produces `schedule-inputs.json`: the single machine-verified input for schedule
-design (Phase B). Never trusts run-type or dependency claims written in plan /
+design (design mode). Never trusts run-type or dependency claims written in plan /
 design documents — both are re-derived from the .tfl files themselves:
 
   - run-type:  flow_io.get_incremental_config() on each .tfl

@@ -1,6 +1,6 @@
 ---
-purpose: Phase B の 2 出力 (schedule-setup-runbook.md / schedule-design.json) のフォーマット規約
-note: runbook は人間が Cloud UI で Linked Task を再現するための資料、design JSON は Phase C (verify_schedules.py) が機械突合に使う構造化版。両者は同じ設計の 2 表現で、内容の食い違いは Phase B のバグ
+purpose: design モードの 2 出力 (schedule-setup-runbook.md / schedule-design.json) のフォーマット規約
+note: runbook は人間が Cloud UI で Linked Task を再現するための資料、design JSON は verify モード (verify_schedules.py) が機械突合に使う構造化版。両者は同じ設計の 2 表現で、内容の食い違いは design モードのバグ
 ---
 
 # Runbook / Design JSON フォーマット
@@ -62,7 +62,7 @@ site: server <URL> / site <site名>
 
 ## schedule-design.json（機械向け）
 
-verify_schedules.py の入力。runbook と同時に Phase B が書く。
+verify_schedules.py の入力。runbook と同時に design モードが書く。
 
 ```json
 {
