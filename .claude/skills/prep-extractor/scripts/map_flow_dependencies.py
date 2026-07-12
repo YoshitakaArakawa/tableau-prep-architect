@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Phase C helper: build a cross-flow dependency map for a set of Prep flows.
 
-For each flow, extracts output PDS names (PublishExtract nodes) and inputs
-(classified via flow_io.inspect_input_node), then derives:
+For each flow, extracts output PDS names (PublishExtract nodes), inputs
+(classified via flow_io.inspect_input_node), and incremental/append config
+(flow_io.get_incremental_config, for backfill-candidate detection), then derives:
   - in-scope dependency edges (flow A consumes flow B's output PDS)
   - a topological migration order (roots with no in-scope deps first)
   - shared vconn tables read by 2+ flows (stg reuse candidates)
@@ -38,7 +39,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "scripts"))
 
-from flow_io import inspect_input_node  # noqa: E402
+from flow_io import inspect_input_node, get_incremental_config  # noqa: E402
 
 FLOW_SUFFIXES = {".tfl", ".tflx", ".json"}
 
@@ -101,12 +102,14 @@ def extract_flow_facts(name: str, flow: dict) -> dict:
             })
         else:  # direct_db / extract / unknown - listed for completeness
             inputs_other.append({"kind": kind, "node_name": n.get("name")})
+    inc = get_incremental_config(flow)
     return {
         "name": name,
         "outputs": outputs,
         "inputs_pds": inputs_pds,
         "inputs_vconn": inputs_vconn,
         "inputs_other": inputs_other,
+        "incremental": {"run_type": inc["run_type"], "control_fields": inc["control_fields"]},
     }
 
 
@@ -194,14 +197,20 @@ def render_markdown(facts: list[dict], edges, warnings, order, cycle, shared) ->
     L.append("")
     L.append("## Per-flow inputs / outputs")
     L.append("")
-    L.append("| Flow | Output PDS | Input PDS | Input vconn tables | Other inputs |")
-    L.append("|---|---|---|---|---|")
+    L.append("| Flow | Output PDS | Input PDS | Input vconn tables | Other inputs | Incremental |")
+    L.append("|---|---|---|---|---|---|")
     for f in facts:
         outs = "<br>".join(o["datasource_name"] or "?" for o in f["outputs"]) or "—"
         ipds = "<br>".join(i["datasource_name"] or "?" for i in f["inputs_pds"]) or "—"
         ivc = "<br>".join(f"{v['vconn_caption']}/{v['table_name']}" for v in f["inputs_vconn"]) or "—"
         ioth = "<br>".join(f"{o['kind']}: {o['node_name']}" for o in f["inputs_other"]) or "—"
-        L.append(f"| {f['name']} | {outs} | {ipds} | {ivc} | {ioth} |")
+        inc = f.get("incremental") or {}
+        if inc.get("run_type") == "incremental":
+            cf = ", ".join(inc.get("control_fields") or []) or "?"
+            incs = f"append (control: {cf})"
+        else:
+            incs = "—"
+        L.append(f"| {f['name']} | {outs} | {ipds} | {ivc} | {ioth} | {incs} |")
     L.append("")
     L.append("## In-scope dependency edges (consumer → producer)")
     L.append("")
