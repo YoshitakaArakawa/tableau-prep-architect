@@ -5,7 +5,7 @@ note: トップレベル構造、flows[] entry (kind=tfl / pds_augment)、inputs
 
 # plan-json-schema
 
-decompose フェーズの機械可読成果物 `decomposition-plan-<flow>.json` のスキーマ。**plan.json が設計の single source of truth** で、ユーザーレビュー用の `decomposition-plan-<flow>.md` は [render_plan_md.py](../.claude/skills/prep-architect/scripts/render_plan_md.py) が plan.json からレンダリングする (手書きしない)。build は [build_from_plan.py](../.claude/skills/prep-builder/scripts/build_from_plan.py) が plan.json だけを読む。
+decompose フェーズの機械可読成果物 `decomposition-plan-<flow>.json` のスキーマ。**plan.json が設計の single source of truth** で、レビュー用の `decomposition-plan-<flow>.md` + `.html` は [render_plan_md.py](../.claude/skills/prep-architect/scripts/render_plan_md.py) が plan.json からレンダリングする (手書きしない)。build は [build_from_plan.py](../.claude/skills/prep-builder/scripts/build_from_plan.py) が plan.json だけを読む。
 
 ## 目次
 

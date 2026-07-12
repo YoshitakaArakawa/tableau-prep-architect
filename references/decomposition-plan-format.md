@@ -1,19 +1,27 @@
 ---
-purpose: prep-architect の decompose フェーズが出力する分解設計案 (ユーザーレビュー用 markdown) の書式仕様
-note: 必須セクション (Summary / New .tfl files / Actions-level splits / Output mapping / Target Tableau Cloud project layout / Dependency DAG / Migration order / Alternatives considered) と各セクションの書式・記述ルールを規定。この md は plan.json (plan-json-schema.md) から render_plan_md.py がレンダリングする産物で、本ファイルはそのレンダリング仕様。設計判断の意味論 (Input policy / Rename-back / lineage 等) の解説も本ファイルが正典
+purpose: prep-architect の decompose フェーズが出力する分解設計案レビュービュー (markdown + HTML) の書式仕様
+note: md の必須セクション (Summary / New .tfl files / Actions-level splits / Output mapping / Target Tableau Cloud project layout / Dependency DAG / Migration order / Alternatives considered) と各セクションの書式・記述ルール、および HTML ビューの構成を規定。両ビューは plan.json (plan-json-schema.md) から render_plan_md.py が同一検証パスでレンダリングする産物。設計判断の意味論 (Input policy / Rename-back / lineage 等) の解説も本ファイルが正典
 ---
 
 # decomposition-plan-format
 
-**decompose フェーズ**の出力——分解設計案 markdown の書式と必須セクションを定義する。
+**decompose フェーズ**の出力——分解設計案レビュービューの書式を定義する。
 
-**この md は手書きしない**: 設計の正は `decomposition-plan-<flow>.json` ([plan-json-schema.md](plan-json-schema.md)) で、md は prep-architect の `render_plan_md.py` が plan.json からレンダリングする Stop 2 レビュー用ビュー。build (`prep-builder`) と manifest init は plan.json を直接消費する。本ファイルの各セクション書式はレンダラの出力仕様であると同時に、**セクションが担う設計判断の意味論** (Input policy / Rename-back / Lineage closure) の正典でもある — architect は plan.json を書くときこの意味論に従う。
+**md も HTML も手書きしない**: 設計の正は `decomposition-plan-<flow>.json` ([plan-json-schema.md](plan-json-schema.md)) で、prep-architect の `render_plan_md.py` が同一の検証パスから 2 つのビューをレンダリングする:
+
+| ビュー | 役割 |
+|---|---|
+| `decomposition-plan-<flow>.md` | git 追跡の設計記録 + ターミナル fallback。本ファイルの §各セクションの書式 が仕様 |
+| `decomposition-plan-<flow>.html` | **Stop 2 の主レビュー面** (ユーザーがブラウザで開く)。自己完結・静的 (JS なし・外部参照なし)。構成は [§HTML ビューの構成](#html-ビューの構成) |
+
+build (`prep-builder`) と manifest init は plan.json を直接消費する。本ファイルの各セクション書式はレンダラの出力仕様であると同時に、**セクションが担う設計判断の意味論** (Input policy / Rename-back / Lineage closure) の正典でもある — architect は plan.json を書くときこの意味論に従う。
 
 目次:
 
 - [トップレベル構造](#トップレベル構造)
 - [Verbosity policy (出力量最小化)](#verbosity-policy-出力量最小化)
 - [各セクションの書式](#各セクションの書式) — Summary / New .tfl files / Input dispatch と stg materialization / Input provisioning required / Joins / Lineage closure invariant / Actions-level splits / Output mapping / Rename-back / Target project layout / Dependency DAG / Migration order / Alternatives considered
+- [HTML ビューの構成](#html-ビューの構成)
 - [ファイル名と出力先](#ファイル名と出力先)
 - [prep-builder / prep-deployer への引き継ぎ](#prep-builder--prep-deployer-への引き継ぎ)
 
@@ -398,9 +406,22 @@ graph TD
 → A 案（1 entity 1 .tfl の原則どおり集約）を採用。
 ```
 
+## HTML ビューの構成
+
+`decomposition-plan-<flow>.html` は md と同じ plan.json + 元 .tfl から `plan_html.py` (render_plan_md.py が呼ぶ) が生成する。md セクションのカード / 表レンダリングに加え、md に無い **As-is → 分解先マップ** を持つ:
+
+| 要素 | 内容 | データ源 |
+|---|---|---|
+| **Step strip** | 元フロー全 step を 1 列のカラーチップで表示。色 = 行き先レイヤ、**赤 = どの新フローにも未割当 (削除候補)**、灰破線 = passthrough / 置換される元 Output。取りこぼし検出が視覚で起こるのが主価値 | plan.json の `included_steps` / `splits` / `inputs[].replaces_steps` / `source_input_step` |
+| **As-is 全ノード DAG** | 元フローの構造そのまま (列 = 最長経路深さ、Prep と同じ左→右)。各ノード 2 行目に行き先 flow 名を静的印字 | 同上 + 元 .tfl のエッジ |
+| **依存 DAG (分解後)** | sources → stg → int → marts の列レイアウト + **第 5 列「元 Output (置換)」**。mart からの破線 = `source_original_output_name` (comparator ペアの視覚表現) | plan.json の `flows[].inputs` / `source_original_output_name` |
+| **分割指針パネル** | stg / int / marts の責務 3 行 + 色の読み方 | 静的テンプレート |
+
+設計制約: **静的 HTML** (JS なし、hover 依存の情報なし — `title` ツールチップは補助のみ)、**自己完結** (外部 CDN / フォント / 画像参照なし)、light / dark 両テーマ対応。スクショ・印刷・共有で情報が欠けないことを優先する。
+
 ## ファイル名と出力先
 
-`<output_dir>/decomposition-plan-<flow-name>.json` (設計の正) と `<output_dir>/decomposition-plan-<flow-name>.md` (render_plan_md.py 産物) の両方をファイル出力する (短いプランでも inline 返しはしない)。会話への戻り値は実行サマリのみ (prep-architect [SKILL.md §出力契約](../.claude/skills/prep-architect/SKILL.md#出力契約))。
+`<output_dir>/decomposition-plan-<flow-name>.json` (設計の正) と `<output_dir>/decomposition-plan-<flow-name>.md` + `.html` (render_plan_md.py 産物) をファイル出力する (短いプランでも inline 返しはしない)。会話への戻り値は実行サマリのみ (prep-architect [SKILL.md §出力契約](../.claude/skills/prep-architect/SKILL.md#出力契約))。
 
 ## prep-builder / prep-deployer への引き継ぎ
 
