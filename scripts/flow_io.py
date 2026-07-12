@@ -92,6 +92,33 @@ def unpack_flow_json(tfl_path: str | Path, out_path: str | Path) -> Path:
     return out
 
 
+def bfs_order(flow: dict[str, Any]) -> list[str]:
+    """Short-ID ordering: BFS from initialNodes, then any unreached nodes.
+
+    This is THE canonical step numbering for the whole toolchain: the
+    flow-summary Topology table's `#` column (gen_flow_summary.py) and
+    plan.json's step references (plan_model.py / build_from_plan.py) both
+    derive from this function, so a step index written at decompose time
+    resolves to the same node UUID at build time.
+    """
+    nodes = flow["nodes"]
+    visited: list[str] = []
+    queue = list(flow.get("initialNodes", []))
+    while queue:
+        cur = queue.pop(0)
+        if cur in visited or cur not in nodes:
+            continue
+        visited.append(cur)
+        for nxt in nodes[cur].get("nextNodes", []) or []:
+            nid = nxt.get("nextNodeId") if isinstance(nxt, dict) else nxt
+            if nid and nid not in visited and nid not in queue:
+                queue.append(nid)
+    for nid in nodes:
+        if nid not in visited:
+            visited.append(nid)
+    return visited
+
+
 def inspect_input_node(flow: dict[str, Any], node_id: str) -> dict[str, Any]:
     """Classify a Prep flow Input node by its upstream connection type.
 
@@ -957,6 +984,7 @@ def verify_edge_namespaces(
     source_flow: dict[str, Any],
     *,
     parent_substitutions: dict[str, str] | None = None,
+    bridged_edges: set[tuple[str, str, str]] | None = None,
 ) -> list[str]:
     """Verify every edge in new_flow has the correct `nextNamespace`.
 
@@ -967,12 +995,18 @@ def verify_edge_namespaces(
         replacing a source parent), the source edge `(parent_substitutions[parent_id],
         child_id)` is consulted instead.
       - Edges with no source counterpart (both endpoints brand-new) are skipped.
+      - Edges listed in `bridged_edges` (as `(parent_id, child_id, ns)` in
+        new-flow ids) are skipped: they bridge over an excluded intermediate
+        node, so their namespace was inherited verbatim from a DIFFERENT
+        source edge (the final hop into the child) and a direct
+        parent->child comparison would be a false mismatch.
 
     Returns a list of human-readable issues (empty list = all edges OK).
     Run this after build (typically alongside `verify_lineage_closure`) to
     catch the namespace-flatten regression.
     """
     parent_substitutions = parent_substitutions or {}
+    bridged_edges = bridged_edges or set()
     src_nodes = source_flow.get("nodes", {}) or {}
     issues: list[str] = []
 
@@ -985,6 +1019,8 @@ def verify_edge_namespaces(
             if not cid:
                 continue
             ns_new = nx.get("nextNamespace") or "Default"
+            if (pid, cid, ns_new) in bridged_edges:
+                continue
 
             # If the child does not exist in source, the edge is internal to
             # the new flow (e.g. -> Output) and not verifiable here.

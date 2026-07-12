@@ -213,34 +213,44 @@ def find_decomposed(manifest: dict[str, Any], flow_name: str) -> dict[str, Any]:
 # Metadata API helpers (resolve-luids)
 # ---------------------------------------------------------------------------
 
-# Lazy import — only required when resolve-luids actually runs.
-def _query_flow_outputs(server, flow_luid: str) -> dict[str, Any]:
+def _query_flows_outputs(server, flow_luids: list[str]) -> dict[str, dict[str, Any]]:
+    """Fetch downstreamDatasources for MANY flows in one Metadata API call.
+
+    Returns {flow_luid: {luid, name, downstreamDatasources: [...]}}. One
+    GraphQL round-trip regardless of flow count — resolve-luids previously
+    issued one query per flow, which dominated its 14-42s wall time.
+    """
+    if not flow_luids:
+        return {}
     query = """
-    query FlowDownstreamDatasources($luid: String!) {
-      flows(filter: { luid: $luid }) {
+    query FlowsDownstreamDatasources($luids: [String]) {
+      flows(filter: { luidWithin: $luids }) {
         luid
         name
         downstreamDatasources { luid name }
       }
     }
     """
-    result = server.metadata.query(query=query, variables={"luid": flow_luid})
+    result = server.metadata.query(query=query, variables={"luids": flow_luids})
     if "errors" in result and result["errors"]:
         msgs = "; ".join(e.get("message", "?") for e in result["errors"])
-        raise RuntimeError(f"Metadata API error for flow {flow_luid}: {msgs}")
+        raise RuntimeError(f"Metadata API error for flows {flow_luids}: {msgs}")
     flows = result.get("data", {}).get("flows", [])
-    if not flows:
-        raise RuntimeError(f"No flow found with LUID {flow_luid}")
-    return flows[0]
+    return {f["luid"]: f for f in flows}
 
 
-def _find_flow_luid_by_name(server, flow_name: str) -> str | None:
-    """Linear scan of all flows. Used when original.flow_luid is null.
+def _fetch_all_flows(server) -> list[Any]:
+    """All flows on the site, every page (flows.get() alone caps at one page)."""
+    import tableauserverclient as TSC  # lazy: only resolve-luids needs it
+    return list(TSC.Pager(server.flows))
+
+
+def _find_flow_luid_by_name(all_flows: list[Any], flow_name: str) -> str | None:
+    """Resolve a flow LUID by exact name from a pre-fetched flow list.
 
     Returns None if not found, or the LUID if exactly one match. Raises on
     ambiguous match.
     """
-    all_flows, _ = server.flows.get()
     matches = [f for f in all_flows if f.name == flow_name]
     if not matches:
         return None
@@ -258,8 +268,6 @@ def _find_flow_luid_by_name(server, flow_name: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 def cmd_init(args: argparse.Namespace) -> int:
-    plan_path = Path(args.decomposition_plan)
-    summary_path = Path(args.flow_summary)
     flows_dir = Path(args.flows_dir)
     output_path = Path(args.output)
 
@@ -272,17 +280,57 @@ def cmd_init(args: argparse.Namespace) -> int:
         )
         return 1
 
-    plan_md = plan_path.read_text(encoding="utf-8")
-    summary_md = summary_path.read_text(encoding="utf-8")
+    provisioning_entries: list[dict[str, Any]] = []
+    if args.plan_json:
+        # plan.json is the single source of truth: original flow identity,
+        # output mapping, AND needs_provisioning stg entries come from it —
+        # no markdown parsing (the md is a rendered view of the same plan).
+        plan = json.loads(Path(args.plan_json).read_text(encoding="utf-8"))
+        source_by_flow = {
+            f["name"]: f["source_original_output_name"]
+            for f in plan.get("flows", [])
+            if f.get("source_original_output_name")
+        }
+        original = {
+            "flow_name": plan["flow_name"],
+            "outputs": [
+                {"name": o["name"], "luid": o.get("luid")}
+                for o in (plan.get("original") or {}).get("outputs", [])
+            ],
+        }
+        if args.original_flow_luid is None:
+            args.original_flow_luid = (plan.get("original") or {}).get("flow_luid")
+        mapping_rows = [
+            {"decomposed_flow_name": k, "original_output_pds": v}
+            for k, v in source_by_flow.items()
+        ]
+        for f in plan.get("flows", []):
+            if f.get("input_status") != "needs_provisioning":
+                continue
+            provisioning_entries.append({
+                "name": f["name"],
+                "layer": f["layer"],
+                "kind": "tfl",
+                "tfl_path": None,
+                "source_original_output_name": f.get("source_original_output_name"),
+                "publish": {"status": "skipped_pending_provisioning",
+                            "flow_luid": None, "published_at": None},
+                "run": {"status": "n/a", "finish_code": None, "run_at": None},
+                "outputs": [{"name": (f.get("output") or {}).get("name") or f["name"],
+                             "luid": None}],
+            })
+    else:
+        plan_md = Path(args.decomposition_plan).read_text(encoding="utf-8")
+        summary_md = Path(args.flow_summary).read_text(encoding="utf-8")
 
-    mapping_rows = parse_output_mapping(plan_md)
-    # Build a lookup: decomposed_flow_name -> source_original_output_name
-    source_by_flow: dict[str, str] = {
-        row["decomposed_flow_name"]: row["original_output_pds"]
-        for row in mapping_rows
-    }
+        mapping_rows = parse_output_mapping(plan_md)
+        # Build a lookup: decomposed_flow_name -> source_original_output_name
+        source_by_flow = {
+            row["decomposed_flow_name"]: row["original_output_pds"]
+            for row in mapping_rows
+        }
 
-    original = parse_flow_summary(summary_md)
+        original = parse_flow_summary(summary_md)
 
     # Scan flows/{layer}/ for both .tfl (kind=tfl) and *.augmenter.json (kind=pds_augment).
     decomposed: list[dict[str, Any]] = []
@@ -325,6 +373,8 @@ def cmd_init(args: argparse.Namespace) -> int:
                 "run": {"status": "n/a", "finish_code": None, "run_at": None},
                 "outputs": [{"name": target_name, "luid": None}],
             })
+
+    decomposed.extend(provisioning_entries)
 
     if not decomposed:
         print(
@@ -430,9 +480,17 @@ def cmd_resolve_luids(args: argparse.Namespace) -> int:
     m = load_manifest(path)
 
     with signed_in_server() as server:
-        # 1. Original flow LUID (if not already set)
+        # 1. Name -> LUID resolution: ONE full flow listing for every entry
+        #    that still lacks a flow_luid (originally one REST scan per entry).
+        needs_name_lookup = (
+            not m["original"]["flow_luid"]
+            or any(df.get("kind") != "pds_augment" and not df["publish"].get("flow_luid")
+                   for df in m["decomposed_flows"])
+        )
+        all_flows = _fetch_all_flows(server) if needs_name_lookup else []
+
         if not m["original"]["flow_luid"]:
-            luid = _find_flow_luid_by_name(server, m["original"]["flow_name"])
+            luid = _find_flow_luid_by_name(all_flows, m["original"]["flow_name"])
             if luid is None:
                 print(
                     f"[publish_manifest] WARNING: original flow "
@@ -441,15 +499,6 @@ def cmd_resolve_luids(args: argparse.Namespace) -> int:
                 )
             m["original"]["flow_luid"] = luid
 
-        # 2. Original output PDS LUIDs
-        if m["original"]["flow_luid"]:
-            orig = _query_flow_outputs(server, m["original"]["flow_luid"])
-            by_name = {d["name"]: d["luid"] for d in orig.get("downstreamDatasources") or []}
-            for o in m["original"]["outputs"]:
-                if not o.get("luid"):
-                    o["luid"] = by_name.get(o["name"])
-
-        # 3. Decomposed flow LUIDs (if not set) + their output PDS LUIDs
         for df in m["decomposed_flows"]:
             if df.get("kind") == "pds_augment":
                 # Live PDS entries have no flow to resolve; pds_luid was set at
@@ -460,19 +509,39 @@ def cmd_resolve_luids(args: argparse.Namespace) -> int:
                     df["outputs"][0]["luid"] = pds_luid
                 continue
             if not df["publish"].get("flow_luid"):
-                luid = _find_flow_luid_by_name(server, df["name"])
+                luid = _find_flow_luid_by_name(all_flows, df["name"])
                 if luid is None:
                     continue
                 df["publish"]["flow_luid"] = luid
                 if df["publish"]["status"] == "pending":
                     df["publish"]["status"] = "published"
-            if not df["outputs"]:
-                continue
-            new = _query_flow_outputs(server, df["publish"]["flow_luid"])
-            by_name = {d["name"]: d["luid"] for d in new.get("downstreamDatasources") or []}
-            for o in df["outputs"]:
+
+        # 2. Output PDS LUIDs: ONE Metadata API query covering the original
+        #    flow and every decomposed flow (originally one query per flow).
+        want_luids = []
+        if m["original"]["flow_luid"]:
+            want_luids.append(m["original"]["flow_luid"])
+        want_luids += [
+            df["publish"]["flow_luid"] for df in m["decomposed_flows"]
+            if df.get("kind") != "pds_augment" and df["publish"].get("flow_luid")
+            and df.get("outputs")
+        ]
+        outputs_by_flow = _query_flows_outputs(server, want_luids)
+
+        def backfill(flow_luid: str | None, outputs: list[dict[str, Any]]) -> None:
+            info = outputs_by_flow.get(flow_luid or "")
+            if not info:
+                return
+            by_name = {d["name"]: d["luid"]
+                       for d in info.get("downstreamDatasources") or []}
+            for o in outputs:
                 if not o.get("luid"):
                     o["luid"] = by_name.get(o["name"])
+
+        backfill(m["original"]["flow_luid"], m["original"]["outputs"])
+        for df in m["decomposed_flows"]:
+            if df.get("kind") != "pds_augment":
+                backfill(df["publish"].get("flow_luid"), df.get("outputs") or [])
 
     save_manifest(path, m)
     print(f"[publish_manifest] resolve-luids: updated {path}", file=sys.stderr)
@@ -490,10 +559,15 @@ def main() -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p_init = sub.add_parser("init", help="Build initial manifest after build")
-    p_init.add_argument("--decomposition-plan", required=True,
-                        help="Path to decomposition-plan-<flow>.md")
-    p_init.add_argument("--flow-summary", required=True,
-                        help="Path to flow-summary.md")
+    p_init.add_argument("--plan-json", default=None,
+                        help="Path to decomposition-plan-<flow>.json. Preferred: "
+                             "replaces --decomposition-plan/--flow-summary parsing")
+    p_init.add_argument("--decomposition-plan", default=None,
+                        help="Path to decomposition-plan-<flow>.md "
+                             "(legacy path; superseded by --plan-json)")
+    p_init.add_argument("--flow-summary", default=None,
+                        help="Path to flow-summary.md (legacy path; requires "
+                             "an `- Outputs: N (...)` Meta line)")
     p_init.add_argument("--flows-dir", required=True,
                         help="Path to flows/ directory containing staging/, intermediate/, marts/")
     p_init.add_argument("--output", required=True,
@@ -528,6 +602,13 @@ def main() -> int:
     p_rl.set_defaults(func=cmd_resolve_luids)
 
     args = parser.parse_args()
+
+    if args.cmd == "init":
+        if not args.plan_json and not (args.decomposition_plan and args.flow_summary):
+            parser.error(
+                "init requires --plan-json, or both --decomposition-plan and "
+                "--flow-summary (legacy)"
+            )
 
     if args.cmd == "update-publish" and args.status == "published":
         # Exactly one of --flow-luid / --pds-luid is required; per-entry kind

@@ -1,11 +1,13 @@
 ---
-purpose: prep-architect の decompose フェーズが出力する分解設計案の markdown 書式仕様
-note: 必須セクション (Summary / New .tfl files / Actions-level splits / Output mapping / Target Tableau Cloud project layout / Dependency DAG / Migration order / Alternatives considered) と各セクションの書式・記述ルールを規定
+purpose: prep-architect の decompose フェーズが出力する分解設計案 (ユーザーレビュー用 markdown) の書式仕様
+note: 必須セクション (Summary / New .tfl files / Actions-level splits / Output mapping / Target Tableau Cloud project layout / Dependency DAG / Migration order / Alternatives considered) と各セクションの書式・記述ルールを規定。この md は plan.json (plan-json-schema.md) から render_plan_md.py がレンダリングする産物で、本ファイルはそのレンダリング仕様。設計判断の意味論 (Input policy / Rename-back / lineage 等) の解説も本ファイルが正典
 ---
 
 # decomposition-plan-format
 
-**decompose フェーズ**の出力——分解設計案の書式と必須セクションを定義する。**`prep-builder`**（build フェーズ）および **`prep-deployer`**（publish フェーズ）が機械的に解釈できる構造を保証する。
+**decompose フェーズ**の出力——分解設計案 markdown の書式と必須セクションを定義する。
+
+**この md は手書きしない**: 設計の正は `decomposition-plan-<flow>.json` ([plan-json-schema.md](plan-json-schema.md)) で、md は prep-architect の `render_plan_md.py` が plan.json からレンダリングする Stop 2 レビュー用ビュー。build (`prep-builder`) と manifest init は plan.json を直接消費する。本ファイルの各セクション書式はレンダラの出力仕様であると同時に、**セクションが担う設計判断の意味論** (Input policy / Rename-back / Lineage closure) の正典でもある — architect は plan.json を書くときこの意味論に従う。
 
 目次:
 
@@ -35,12 +37,11 @@ note: 必須セクション (Summary / New .tfl files / Actions-level splits / O
 
 ## Verbosity policy (出力量最小化)
 
-prep-builder / prep-deployer は本文書を機械的に消費する。**冗長な解説は output token 浪費** で、Skill fork 時間を直接押し上げる。以下に従う:
+md の定型部はレンダラが生成するため、**architect の output token は plan.json の設計フィールドに限られる**。そこでも冗長さを避ける:
 
-- **Description**: 各 .tfl のセクションで **1-2 行に圧縮**。業務的な詳細解説は `analysis-*.md` 側に既にある (重複しない)
-- **Alternatives considered**: 非自明な判断分岐 (例: 1 entity 1 .tfl ルールを破る判断、独自命名規約を採用する判断) があったときのみ書く。自明な決定では本セクション自体を **省略可** (テンプレで 3 案検討するのは不要)
-- **Upstream lineage**: 表は必須だが、Source Prev chain は **連続するステップなら区間表記** で良い (例: `#8 → #9 → ... → #22` ではなく `#8..#22`)
-- **Migration order**: 段階番号 + 1 行説明の箇条書き。各 step を見出し + 段落で展開しない
+- **description**: 各 entry で **1-2 行に圧縮**。業務的な詳細解説は `analysis-*.md` 側に既にある (重複しない)
+- **alternatives**: 非自明な判断分岐 (例: 1 entity 1 .tfl ルールを破る判断、独自命名規約を採用する判断) があったときのみ書く。自明な決定では **省略可** (テンプレで 3 案検討するのは不要)
+- Upstream lineage 表・Migration order・DAG はレンダラが plan.json から機械生成する (architect は書かない)
 
 各セクションが参照する判断基準:
 
@@ -396,17 +397,17 @@ graph TD
 
 ## ファイル名と出力先
 
-`<output_dir>/decomposition-plan-<flow-name>.md` に必ずファイル出力する (短いプランでも inline 返しはしない)。会話への戻り値は実行サマリのみ (prep-architect [SKILL.md §出力契約](../.claude/skills/prep-architect/SKILL.md#出力契約))。
+`<output_dir>/decomposition-plan-<flow-name>.json` (設計の正) と `<output_dir>/decomposition-plan-<flow-name>.md` (render_plan_md.py 産物) の両方をファイル出力する (短いプランでも inline 返しはしない)。会話への戻り値は実行サマリのみ (prep-architect [SKILL.md §出力契約](../.claude/skills/prep-architect/SKILL.md#出力契約))。
 
 ## prep-builder / prep-deployer への引き継ぎ
 
-| セクション | 利用するフェーズ |
-|---|---|
-| `New .tfl files` | prep-builder が .tfl を生成するために必須 |
-| `Actions-level splits` | prep-builder が 1 SuperTransform を複数 .tfl に分けるときの指示書（`beforeActionAnnotations` の振り分け） |
-| `Output mapping (original → decomposed)` | prep-builder が build 完了時に `publish_manifest.py init` で読み取り、prep-output-comparator のペア解決に最終的に使う ([publish-manifest-format.md](publish-manifest-format.md)) |
-| `Target Tableau Cloud project layout` | `prep-deployer` が `create_projects.py` を呼ぶときに参照 |
-| `Dependency DAG` | publish 順序の決定 |
-| `Migration order` | ユーザー向けの段階移行ガイド |
+後続フェーズが機械消費するのは **plan.json** ([plan-json-schema.md](plan-json-schema.md))。md の各セクションは Stop 2 レビューの確認観点に対応する:
 
-書式が乱れると後続フェーズが誤読する。**必ず本テンプレに従う**。
+| セクション (md) / フィールド (json) | 利用するフェーズ |
+|---|---|
+| `New .tfl files` / `flows[]` | prep-builder の `build_from_plan.py` が全成果物を生成 |
+| `Actions-level splits` / `flows[].splits` | 1 SuperTransform を複数 .tfl に分ける指示（`beforeActionAnnotations` の振り分け） |
+| `Output mapping` / `flows[].source_original_output_name` | `publish_manifest.py init --plan-json` が転記し、prep-output-comparator のペア解決に最終的に使う ([publish-manifest-format.md](publish-manifest-format.md)) |
+| `Target Tableau Cloud project layout` / `flow_projects` + `ds_projects` | `prep-deployer` の publish 先解決、`create_projects.py` の参照 |
+| `Dependency DAG` / `flows[].inputs` | publish 順序の決定 (wave 分割) |
+| `Migration order` | ユーザー向けの段階移行ガイド (レンダラが wave から導出) |
