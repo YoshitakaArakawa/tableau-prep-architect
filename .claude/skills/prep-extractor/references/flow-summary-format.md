@@ -38,12 +38,13 @@ note: トップレベル構造、Meta / Topology / Dependency DAG / SuperTransfo
 - Total nodes: 29
 - Total actions (across SuperTransforms): 91
 - Distinct nodeTypes: LoadSqlProxy(1), LoadSql(1), SuperTransform(18), SuperJoin(3), SuperUnion(2), SuperAggregate(1), SuperNewRows(1), PublishExtract(2)
+- Outputs: 2 (`stockmarket_transaction_prepped`, `stockmarket_transaction_detailed_prepped`)
 - Incremental inputs: Stock and Index Price (control field: Date)
 - Append-mode outputs: Output
 - Generated at: <ISO-date>
 ```
 
-`Incremental inputs` / `Append-mode outputs` の 2 行は **該当がある場合のみ** 出力される。ソースは `flow["nodeProperties"]` の `IncrementalConfiguration` (incrementalEnabled=true の Input と control field caption) と `OutputRefreshOptions` (outputOperationType が Append の Output)。nodes の walk では見えない場所にあるため、この行の有無が incremental フロー検出の一次シグナルになる。
+`Outputs:` 行は [publish_manifest.py](../../../../scripts/publish_manifest.py) の legacy `init` 経路がこの行形をパースする機械可読行 (書式を変えない。PublishExtract が無いフローでは省略される)。`Incremental inputs` / `Append-mode outputs` の 2 行は **該当がある場合のみ** 出力される。ソースは `flow["nodeProperties"]` の `IncrementalConfiguration` (incrementalEnabled=true の Input と control field caption) と `OutputRefreshOptions` (outputOperationType が Append の Output)。nodes の walk では見えない場所にあるため、この行の有無が incremental フロー検出の一次シグナルになる。
 
 ### Topology
 

@@ -24,7 +24,7 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from inspect_actions import summarise_action  # noqa: E402
-from flow_io import container_convertibility, iter_container_children  # noqa: E402
+from flow_io import bfs_order, container_convertibility, iter_container_children  # noqa: E402
 
 # nodeTypes this repo's toolchain understands (see references/tfl-json-schema.md).
 # Anything else is processed anyway but flagged in Warnings.
@@ -51,26 +51,6 @@ ACTION_LABEL = {"RenameColumn": "Rename"}
 
 def strip_type(node_type: str) -> str:
     return node_type.split(".")[-1] if node_type else "?"
-
-
-def bfs_order(flow: dict) -> list[str]:
-    """Short-ID ordering: BFS from initialNodes, then any unreached nodes."""
-    nodes = flow["nodes"]
-    visited: list[str] = []
-    queue = list(flow.get("initialNodes", []))
-    while queue:
-        cur = queue.pop(0)
-        if cur in visited or cur not in nodes:
-            continue
-        visited.append(cur)
-        for nxt in nodes[cur].get("nextNodes", []) or []:
-            nid = nxt.get("nextNodeId") if isinstance(nxt, dict) else nxt
-            if nid and nid not in visited and nid not in queue:
-                queue.append(nid)
-    for nid in nodes:
-        if nid not in visited:
-            visited.append(nid)
-    return visited
 
 
 def next_ids(node: dict) -> list[str]:
@@ -214,6 +194,17 @@ def build_summary(flow_path: Path, flow_name_override: str | None = None) -> str
     ) or "none"
     L.append(f"- Total actions (across SuperTransforms): {total_actions} ({breakdown})")
     L.append("- Distinct nodeTypes: " + ", ".join(f"{t}({c})" for t, c in type_counts.items()))
+    # publish_manifest.py's legacy `init` path parses this exact line shape;
+    # keep `- Outputs: N (`a`, `b`)` in sync with its _OUTPUTS_LINE regex.
+    out_names = [
+        nodes[n].get("datasourceName")
+        for n in order
+        if strip_type(nodes[n].get("nodeType", "")) == "PublishExtract"
+        and nodes[n].get("datasourceName")
+    ]
+    if out_names:
+        L.append(f"- Outputs: {len(out_names)} ("
+                 + ", ".join(f"`{n}`" for n in out_names) + ")")
     refresh = refresh_semantics(flow)
     if refresh["incremental_inputs"]:
         L.append("- Incremental inputs: " + ", ".join(

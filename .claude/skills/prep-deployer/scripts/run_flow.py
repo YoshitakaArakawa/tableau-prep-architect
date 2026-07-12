@@ -127,6 +127,7 @@ def main():
             return
 
         start = time.time()
+        last_status = None
         while time.time() - start < args.timeout:
             time.sleep(args.poll_interval)
             current = server.jobs.get_by_id(job.id)
@@ -134,7 +135,11 @@ def main():
             status = (FINISH_CODES.get(current.finish_code, "InProgress")
                       if current.completed_at is None
                       else FINISH_CODES.get(current.finish_code, f"Unknown({current.finish_code})"))
-            print(f"  [{elapsed:>5}s] status={status}")
+            # Print on status TRANSITIONS only — per-interval lines add no
+            # information and pile up in the driving agent's context.
+            if status != last_status:
+                print(f"  [{elapsed:>5}s] status={status}")
+                last_status = status
             if current.completed_at is not None:
                 code = current.finish_code
                 label = FINISH_CODES.get(code, f"Unknown({code})")
