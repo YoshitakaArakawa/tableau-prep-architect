@@ -105,10 +105,10 @@ md の定型部はレンダラが生成するため、**architect の output tok
 - **Transforms (column-level)**:
   | op | column_name | to_caption | to_datatype |
   |---|---|---|---|
-  | rename | `[71773dea-8ab7-31a8-824e-1adaa86101a0]` | `商談ID` | — |
-  | rename | `[5f21c0aa-93b8-3c11-8f60-1adaa8610b22]` | `単価 (USD)` | — |
-  | cast | `[10f83648-b8ca-3e2d-bb8b-bb11e8a1ea7d]` | `金額` | `real` |
-  | hide | `[ac70859b-5363-33de-8121-d53b3836dc66]` | — | — |
+  | rename | `[bbbbbbbb-0000-0000-0000-000000000001]` | `商談ID` | — |
+  | rename | `[cccccccc-0000-0000-0000-000000000002]` | `単価 (USD)` | — |
+  | cast | `[dddddddd-0000-0000-0000-000000000003]` | `金額` | `real` |
+  | hide | `[eeeeeeee-0000-0000-0000-000000000004]` | — | — |
 - **Description**:
   Opportunity テーブルの UUID 列名を元の内部名にピン留め (`単価 (USD)` は actions-split で吸収した正規化)。semantic translation はしない。
 
@@ -124,7 +124,7 @@ md の定型部はレンダラが生成するため、**architect の output tok
   - Published DS: `stg_salesforce__opportunities` (decompose 生成済 stg PDS)
   - Published DS: `stockmarket_data_prepped` (**passthrough from source flow** — stg を作らず元 PDS を直接参照)
     - Project path: `0_Datasource`
-    - LUID: `f1390b46-c0de-42e1-a470-974722e0800d`
+    - LUID: `aaaaaaaa-0000-0000-0000-000000000001`
 - **Outputs**:
   - Type: Published Data Source
   - Name: `int_orders_enriched`
@@ -304,24 +304,23 @@ prep-builder の build 開始前に [`scripts/flow_io.py`](../scripts/flow_io.py
 ```markdown
 ## Target Tableau Cloud project layout
 
-Parent project: `Sales Analytics`（ユーザー指定、要事前作成）
+Target project: `Sales Analytics/...`（ユーザー指定）
 
 target 直下に `flows/` (flow .tfl の publish 先) と `datasources/` (Published DS の publish 先) の 2 親を作り、各々の下に dbt 3 レイヤを置く ([project-hierarchy.md](project-hierarchy.md))。
 
-| Subproject | Contains | Permissions (推奨) |
-|---|---|---|
-| `flows/stg` | stg_salesforce__opportunities.tfl, stg_snowflake__orders.tfl | ETL: Editor / BI: Viewer |
-| `flows/intermediate` | int_orders_enriched.tfl, int_customer_classified.tfl | ETL: Editor / BI: None |
-| `flows/marts` | fct_sales.tfl, dim_customer.tfl, rpt_sales_with_customer.tfl | ETL: Editor / BI: Viewer |
-| `datasources/stg` | stg_salesforce__opportunities, stg_snowflake__orders (PDS) | ETL: Editor / BI: Viewer |
-| `datasources/intermediate` | int_orders_enriched, int_customer_classified (PDS) | ETL: Editor / BI: None |
-| `datasources/marts` | fct_sales, dim_customer, rpt_sales_with_customer (PDS) | BI: Editor / Wide: Viewer |
+| Subproject | Contains |
+|---|---|
+| `flows/stg` | stg_salesforce__opportunities.tfl, stg_snowflake__orders.tfl |
+| `flows/intermediate` | int_orders_enriched.tfl, int_customer_classified.tfl |
+| `flows/marts` | fct_sales.tfl, dim_customer.tfl, rpt_sales_with_customer.tfl |
+| `datasources/stg` | stg_salesforce__opportunities, stg_snowflake__orders (PDS) |
+| `datasources/intermediate` | int_orders_enriched, int_customer_classified (PDS) |
+| `datasources/marts` | fct_sales, dim_customer, rpt_sales_with_customer (PDS) |
 
-Project creation commands（`prep-deployer` で実行）:
-```bash
-python create_projects.py --parent-name "Sales Analytics"
+サブプロジェクトの推奨権限テンプレは [project-hierarchy.md §推奨権限テンプレ](project-hierarchy.md#推奨権限テンプレ) 参照。
 ```
-```
+
+target・その上位階層・target 直下の `flows/` / `datasources/`・各々の下の dbt 3 レイヤは、**未作成なら preflight が追加プロンプトなしに作成する** (`create_projects.py` を `flows/` / `datasources/` の LUID で `--parent-id` に渡して各 1 回、計 2 回。詳細と権限方針は [project-hierarchy.md](project-hierarchy.md))。architect は plan に作成コマンドを書かない。
 
 ### Dependency DAG (Mermaid)
 
@@ -382,11 +381,11 @@ graph TD
 ```markdown
 ## Migration order
 
-段階的に移行することで、既存フローと並走させながら安全に切り替える（Step 番号は本セクション内ローカル、Skill 間 workflow とは別軸）：
+段階的に移行することで、既存フローと並走させながら安全に切り替える（Step 番号は本セクション内ローカル、Skill 間 workflow とは別軸）。**全層を Published DS として publish し、下流レイヤは上流レイヤの PDS を Input として参照する** (Cloud では flow 間 chain は PDS 経由が前提、Hyper file 出力は cross-flow 共有不可):
 
-1. **Step 1 (stg)**: stg_*.tfl を build して Hyper 出力を確認。既存フローとは無関係に並走
-2. **Step 2 (int)**: int_*.tfl を build、stg の Hyper を入力に動作確認
-3. **Step 3 (marts fct/dim)**: fct_sales / dim_customer を build、Published DS に publish
+1. **Step 1 (stg)**: stg を publish (vconn は Live PDS、非標準 stg は .tfl build + publish + run)。下流はこの stg Published DS を Input に参照
+2. **Step 2 (int)**: int_*.tfl を build・publish・run、stg の Published DS を Input に動作確認
+3. **Step 3 (marts fct/dim)**: fct_sales / dim_customer を build、int の Published DS を Input に publish + run
 4. **Step 4 (marts rpt)**: rpt_sales_with_customer.tfl を build、fct_sales / dim_customer の Published DS を Input にして JOIN 済み Published DS を publish（Linked Tasks で Step 3 → Step 4 の連鎖）
 5. **Step 5 (検証)**: 既存フローの出力と数値一致を確認
 6. **Step 6 (切替)**: BI 側の参照先を新 Published DS（rpt または fct/dim 直接）に切り替え

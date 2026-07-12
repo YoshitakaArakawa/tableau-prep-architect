@@ -1,13 +1,13 @@
 ---
 purpose: prep-deployer の preflight フェーズが pending segments と dbt 3 レイヤを idempotent に一括作成するアルゴリズム
-note: deploy-context.md frontmatter の消費、pending segments の順次作成、dbt 3 レイヤの一括作成、idempotent 性を規定。承認は step 0 の target path 指定で兼ねる
+note: deploy-context.md frontmatter の消費、pending segments の順次作成、dbt 3 レイヤの一括作成、idempotent 性を規定。preflight は goal ≥ ④ の合意で起動 (goal ②/③ では走らせない)
 ---
 
 # preflight-recipe
 
 `prep-deployer` の **Preflight フェーズ** の具体手順。[prep-extractor](../../prep-extractor/SKILL.md) Phase B が生成した `deploy-context.md` を読み、target までの pending セグメントと dbt 3 レイヤ (`stg / intermediate / marts`) を順に idempotent 作成する。
 
-承認方針: **追加プロンプトは出さない**。session intake で target path が明示されたことが合意 ([autonomous-recovery.md §実行ポリシー](autonomous-recovery.md))。スクリプトも非対話。
+承認方針: **追加プロンプトは出さない**。preflight (サーバー書込) は **goal ≥ ④ (Cloud publish) のときのみ**走る — session intake の goal 指定が書き込み合意を兼ねる ([autonomous-recovery.md §実行ポリシー](autonomous-recovery.md))。goal ②/③ (ローカル完結) では preflight を起動しない (plan.json の layer LUID は TODO placeholder のまま許容)。スクリプトも非対話。
 
 階層モデルの全体像は [../../../../references/project-hierarchy.md](../../../../references/project-hierarchy.md) を参照。
 
@@ -38,9 +38,13 @@ if missing_ds:
     create_projects.py --parent-id <datasources_luid> --layers <missing_ds>
 ```
 
-すべての pending を作り切る前提（ユーザーが target path を指示した時点で全段の作成が同意されている）。`create_project.py` / `create_projects.py` は idempotent なので、すでに存在する project は `[skip]` で安全。
+すべての pending を作り切る前提（goal ≥ ④ で target path が確定した時点で全段の作成が同意されている）。`create_project.py` / `create_projects.py` は idempotent なので、すでに存在する project は `[skip]` で安全。
 
 flows/ と datasources/ を分ける理由 (権限分離・一覧性・publish 先の独立) は [../../../../references/project-hierarchy.md](../../../../references/project-hierarchy.md) を参照。
+
+## 完了後 (caller の責務) — Phase B 再実行 (0c')
+
+preflight で 3 レイヤを作成しても `deploy-context.md` の layer 行 LUID は空のまま — **preflight スクリプトはファイルへ書き戻さない**。caller は preflight 完了後に **prep-extractor Phase B を再実行 (0c')** して `deploy-context.md` を更新し、作成済みプロジェクトの LUID を layer 行に埋めてから publish / 後段の decompose へ進む。この 0c' 済み deploy-context が gen_plan_skeleton (plan.json の `flow_projects` / `ds_projects` 充填) と builder Output の projectLuid 供給元になる。0a → 0c (preflight) → 0c' (Phase B 再実行) → decompose / publish の順が正。
 
 ## エラー時の挙動
 

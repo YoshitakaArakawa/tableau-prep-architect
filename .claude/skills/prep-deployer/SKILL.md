@@ -5,7 +5,7 @@ description: prep-builder が生成した .tfl 群を Tableau Server/Cloud に p
 
 # prep-deployer
 
-prep-builder が組み立てた .tfl 群を Tableau Server/Cloud に届け、運用副作用 (preflight / publish / run) を扱う Skill。**session intake (CLAUDE.md step 0) で goal (Q2) と target path (Q4) が合意済みの前提で、書き込み操作は承認プロンプトを出さずに自律実行する**。失敗は [autonomous-recovery](references/autonomous-recovery.md) のマッピングで分類し、回復可能なら自動リトライ、回復不能なら escalation。
+prep-builder が組み立てた .tfl 群を Tableau Server/Cloud に届け、運用副作用 (preflight / publish / run) を扱う Skill。**session intake ([prep-migrate §Session intake](../prep-migrate/SKILL.md#session-intake-step-0)) で goal (Q2) と target path (Q4) が合意済みの前提で、書き込み操作は承認プロンプトを出さずに自律実行する**。失敗は [autonomous-recovery](references/autonomous-recovery.md) のマッピングで分類し、回復可能なら自動リトライ、回復不能なら escalation。
 
 本 Skill は `context: fork` を **付けない**。理由は publish / run の失敗を主会話で観測し、recovery ループの最終 escalation を主会話に報告する必要があるため。
 
@@ -24,9 +24,11 @@ build フェーズは別 Skill ([prep-builder](../prep-builder/SKILL.md))。publ
 | 入力 | `deploy-context.md` (prep-extractor Phase B 出力) |
 | 出力 | pending セグメントと dbt サブプロジェクトの作成結果 (idempotent) |
 | 副作用 | サーバー副作用あり (プロジェクト作成のみ、データには触れない) |
-| 承認 | session intake の target path 指定で合意済み。追加プロンプトなし |
+| 承認 | **goal ≥ ④ (Cloud publish) のときのみ実行** — session intake の goal 指定で合意済み、追加プロンプトなし。goal ②/③ (ローカル完結) では preflight を走らせない |
 
 アルゴリズム・中断時の挙動は [references/preflight-recipe.md](references/preflight-recipe.md) を参照。スクリプトは `create_project.py` (1 セグメント) と `create_projects.py` (dbt 3 レイヤ一括)、いずれも非対話で動く。
+
+**preflight 完了後、caller は prep-extractor Phase B を再実行 (0c') して** `deploy-context.md` の layer 行に作成済みプロジェクトの LUID を埋めてから publish / 後段の decompose へ進む (初回 Phase B は layer 未作成で LUID が空のため)。preflight スクリプトは deploy-context.md への書き戻しをしない — Phase B 再実行が正 ([references/preflight-recipe.md](references/preflight-recipe.md))。
 
 ### Publish
 

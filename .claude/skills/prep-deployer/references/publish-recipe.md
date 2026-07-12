@@ -186,12 +186,4 @@ python scripts/run_layer.py --manifest $MANIFEST --layer marts
 
 ## ロールバック
 
-publish 失敗時 or publish 後に問題が見つかったときの戻し方：
-
-| 状況 | 対処 |
-|---|---|
-| publish 自体が失敗（HTTP エラー） | エラーメッセージに従い修正・再 publish。Tableau Cloud 側に副作用なし |
-| publish は成功したが flow が動かない | Tableau Cloud の **バージョン履歴** から前バージョンに戻す（UI: Flow → Revision History） |
-| 複数 flow を publish 中に途中失敗 | 既に publish 済みのものを **手動で削除 or 戻す**。スクリプト側で自動ロールバックはしない |
-
-ロールバックを自動化しない理由 (監査ログ保全) は [autonomous-recovery.md §ロールバック方針](autonomous-recovery.md)。
+ロールバック方針の正典は [autonomous-recovery.md §ロールバック方針](autonomous-recovery.md)。要点: **AI は自動ロールバックしない** (監査ログ保全)。publish 自体の失敗は Cloud 側に副作用なし — エラーに従い修正・再 publish。publish は通ったが flow が動かない / 複数 flow の publish が途中で中途状態になった場合は、元 flow を残したままエラー報告し、必要なら人間が Cloud UI (Flow → Revision History) から revert / 既 publish 分の削除を判断する。

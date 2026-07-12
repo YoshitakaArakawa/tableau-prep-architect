@@ -3,8 +3,8 @@ name: prep-output-comparator
 description: 元フローの最終 Published DS と分解後フローの最終 Published DS を Tableau Metadata API + Tableau MCP で比較し、列差分と全体行数差分の機械的差分を Markdown レポートとして出力する Skill。prep-deployer の publish/run 完了後に「分解後 DS が元と等価か」の基礎的な parity チェックをしたいとき、ユーザーが「E2E 比較して」「元と新で差分を確認して」「parity チェックして」と発言したときに起動する。原因分析・修正提案・値そのものの比較は持たない (値同値性が必要なら caller が個別に query-datasource を叩くか、本 Skill を fork して拡張する)。修正判断はメインエージェントが Markdown を読んで prep-builder / prep-deployer の再呼び出しで対応する。
 context: fork
 agent: general-purpose
-model: claude-sonnet-5
-allowed-tools: Read Write Bash(python *) Glob Grep
+model: sonnet
+allowed-tools: Read Write Bash(python *) Glob Grep mcp__tableau__get-datasource-metadata mcp__tableau__query-datasource mcp__tableau__list-datasources
 ---
 
 # prep-output-comparator
@@ -13,11 +13,9 @@ allowed-tools: Read Write Bash(python *) Glob Grep
 
 スコープを基礎的なテストに絞っている理由: 業務知識なしに key column / measure column を自動選択すると、想定した分類列がスキーマに存在しないケース等で意味的に不適切な列にフォールバックし、結果の意味が壊れる。値そのものの比較が必要な場合は **caller が用途に応じて query-datasource を直接叩く** か、**ユーザーが本 Skill を fork して `measure_columns` 必須化版を作る** ことで、業務知識を caller / ユーザー側に明示的に置く。
 
-役割対称性: 読み取り = prep-extractor + **prep-output-comparator** / 書き込み = prep-deployer。Cloud 上の DS を読むことだけが責務で、修正には踏み込まない。
-
 ## Caller から渡される入力
 
-`context: fork` で動くため caller (メインエージェント) は会話履歴を渡せない。起動時に以下を文章で明示すること:
+fork は会話履歴を渡せないため起動時に以下を文章で明示する ([fork-skill-contract.md §1](../../../references/fork-skill-contract.md)):
 
 | 入力 | 必須 | 例 |
 |---|---|---|
@@ -37,7 +35,7 @@ key_columns / measure_columns / split_dimension の指定は受け付けない (
 
 `pairs.json` (Step 1 のペア解決中間ファイル) も同じ directory に残してよい (デバッグ用)。
 
-メイン会話への戻り値の末尾に **`## Timing` ブロック** を必ず含める (フォーマットと Skill 別 breakdown 推奨項目: [skill-timing-contract.md](../../../references/skill-timing-contract.md))。
+戻り値末尾の `## Timing` ブロックは [fork-skill-contract.md §2](../../../references/fork-skill-contract.md) に従う。
 
 ## ワークフロー
 
@@ -54,7 +52,7 @@ key_columns / measure_columns / split_dimension の指定は受け付けない (
 [scripts/resolve_pairs.py](scripts/resolve_pairs.py) を実行:
 
 ```bash
-python .claude/skills/prep-output-comparator/scripts/resolve_pairs.py \
+python ${CLAUDE_SKILL_DIR}/scripts/resolve_pairs.py \
   --manifest <manifest_path> \
   --output <output_dir>/pairs.json
 ```
@@ -137,9 +135,7 @@ dimension 列の選び方は [references/mcp-query-recipes.md](references/mcp-qu
 
 ## 失敗時の動作
 
-スクリプトや MCP 呼び出しが失敗した場合は **その時点で停止し、caller にエラーを返す** (autonomous-recovery はしない)。本 Skill は読み取り専用で副作用がないため、リトライは caller (メインエージェント) が判断する。
-
-よくある失敗パターン:
+失敗時は停止して caller にエラーを返す ([fork-skill-contract.md §3](../../../references/fork-skill-contract.md))。本 Skill 固有のよくある失敗パターン:
 
 - manifest が null LUID を含む: prep-deployer の `resolve-luids` が未実行。caller に「`python scripts/publish_manifest.py resolve-luids --manifest ...` を先に実行してください」と返す
 - manifest に `source_original_output_name` を持つ decomposed flow が 0 件: marts レイヤの公開対象が無い (= decomposition-plan の Output mapping が空)。caller に decomposition-plan の Output mapping セクションを確認するよう案内

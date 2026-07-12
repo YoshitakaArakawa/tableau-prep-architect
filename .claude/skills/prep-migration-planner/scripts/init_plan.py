@@ -45,7 +45,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from flow_io import get_incremental_config  # noqa: E402
 
-# Q2 の goal 段階 (CLAUDE.md Session intake) を表示ラベルに対応させる
+# Q2 の goal 段階 (prep-migrate Session intake) を表示ラベルに対応させる
 GOAL_LABELS = {
     1: "① 分析のみ",
     2: "② 分解設計まで",

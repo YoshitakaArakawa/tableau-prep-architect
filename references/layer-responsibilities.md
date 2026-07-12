@@ -25,7 +25,14 @@ stg は **column-level 操作だけ** に閉じる。row-level 操作 (フィル
 
 **目安**: 1 stg は **ノード 5〜15 個相当の column 操作**。row-level 操作を 1 つでも含むなら staging の責務を逸脱しているサイン。
 
-**マテリアライゼーション**: stg は **input が vconn (virtual connection) のとき Live PDS として publish** (`materialization: live_pds`、[prep-pds-augmenter](../.claude/skills/prep-pds-augmenter/SKILL.md) 経由)。**input が vconn 以外 (file / extract / 直接 DB) のときは現状サポート外 — 当該 stg は build/deploy を skip し warning を出して escalation** (将来的に .tfl フォールバック分岐を追加予定)。判定は prep-builder が flow.json の Input ノード種別から自動で行う。
+**マテリアライゼーション**: stg の Input 単位の取扱は prep-extractor Phase B の `input-dispatch-mech.json` を architect が読んで決める (正典は [decomposition-plan-format.md §Input dispatch と stg materialization](decomposition-plan-format.md#input-dispatch-と-stg-materialization))。経路:
+
+- **`pds` 解決済 → passthrough**: stg .tfl を作らず、下流 int が元 PDS を直接参照 (stg entry 自体を plan に置かない)
+- **`vconn` → augment**: `materialization: live_pds` で [prep-pds-augmenter](../.claude/skills/prep-pds-augmenter/SKILL.md) が Live PDS として publish (run フェーズなし)
+- **`direct_db` / `extract` → needs_provisioning**: build 時に当該 stg を skip + manifest warning を出し、plan の `## Input provisioning required` に整備案を記載 (Cloud 側整備後に再開)
+- **非標準 stg (非 vconn な複雑 stg が要る限定ケース) → tfl**: `materialization: tfl` で従来通り .tfl を組み立てて publish + run
+
+policy 判定は architect が持ち、builder が `inspect_input_node()` で再検証する (`materialization: live_pds` 宣言なのに vconn を返さなければ build 中断 + escalation、silent fallback 禁止)。
 
 ### intermediate (`int_*`)
 
