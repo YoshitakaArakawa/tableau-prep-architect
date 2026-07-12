@@ -1,8 +1,8 @@
 ---
 name: prep-extractor
-description: Tableau Prep の .tfl / .tflx / flow.json およびサーバー上のプロジェクト階層を読み、後段が直接 JSON / REST を見なくて済むコンパクトなサマリに再構成する Skill。Phase A = flow extraction（flow-summary.md）、Phase B = cloud context extraction（deploy-context.md + input-dispatch-mech.json）、Phase C = flow dependency mapping（flow-dependencies.md、複数フロー移行の計画時のみ）の 3 フェーズを持つ。大きな Prep フロー（数十〜数百ノード）を解析・分解する前、または Tableau Cloud に publish する前に必ず実行する。ユーザーが「フローを extract して」「flow-summary を作って」「publish 先のプロジェクトを確認して」「Input を分類して」「フロー間の依存を調べて」「移行順を決めて」と言ったとき、サーバー上のフローを DL したいときに起動（list_flows.py / download_flow.py）。
+description: Tableau Prep の .tfl / .tflx / flow.json およびサーバー上のプロジェクト階層を読み、後段が直接 JSON / REST を見なくて済むコンパクトなサマリに再構成する Skill。Phase A = flow extraction（flow-summary.md）、Phase B = cloud context extraction（deploy-context.md + input-dispatch-mech.json）、Phase C = flow dependency mapping（flow-dependencies.md、複数フロー移行の計画時のみ）の 3 フェーズを持つ。大きな Prep フロー（数十〜数百ノード）を解析・分解する前、または Tableau Cloud に publish する前に必ず実行する。ユーザーが「フローを extract して」「flow-summary を作って」「publish 先のプロジェクトを確認して」「Input を分類して」「フロー間の依存を調べて」「移行順を決めて」と言ったとき、サーバー上のフローを DL したいときに起動（list_flows.py / download_flow.py）。移行セッション冒頭の intake・goal ゲート・起動順序は prep-migrate が正典（本 Skill 単体で移行セッションを始めない）。
 context: fork
-model: claude-haiku-4-5-20251001
+model: haiku
 allowed-tools: Read Write Bash(python *) Bash(mkdir *) Glob Grep
 ---
 
@@ -105,13 +105,15 @@ Tableau Server/Cloud 上の **publish 先プロジェクト階層** を REST API
 
 内部は 3 ステップ (1-pass target_path scan → Input dispatch + 親プロジェクト集合の抽出 → 必要なら `--also-scan` 再 scan + dispatch 再実行)。**手順の CLI・入力の扱い・エラーハンドリング・unknown 検出時の挙動 (exit 2 = session 中断 / direct_db・extract は中断せず provisioning 経路) ・URL ID の LUID 逆引き不可問題は [references/deploy-context-procedure.md](references/deploy-context-procedure.md) を Read で取得** (実行前に必読)。
 
+**preflight 後の再実行 (0c')**: goal ≥ ④ (Cloud publish) では初回 Phase B の時点で stg/int/marts プロジェクトが未作成 (presence=no) なので layer LUID が空。prep-deployer preflight が 3 レイヤを作成した後に **Phase B をもう一度実行** して `deploy-context.md` の layer 行に LUID を埋め、その更新版を入力に decompose の `gen_plan_skeleton.py` が plan.json の `flow_projects` / `ds_projects` を充填する。goal ②/③ (ローカル完結) では preflight も 0c' も走らせず、plan.json の layer LUID は TODO placeholder のまま許容する。
+
 メイン会話への戻り値の末尾に **`## Timing` ブロック** を必ず含める ([skill-timing-contract.md](../../../references/skill-timing-contract.md))。
 
 ---
 
 # Phase C: Flow dependency mapping (optional)
 
-複数フローをまとめて移行する計画時に、**フロー間の依存 (A の入力 PDS = B の出力 PDS) を機械抽出して着手順を確定する** フェーズ。読み取り専用。フロー名やドメイン直感から着手順を推定すると外れるため、必ず本フェーズの出力で確定させる。**毎セッションでは走らせない** (依存はプロジェクト内で安定、フロー集合が変わった時のみ再生成)。
+複数フローをまとめて移行する計画時に、**フロー間の依存 (A の入力 PDS = B の出力 PDS) を機械抽出して着手順を確定する** フェーズ。読み取り専用。フロー名やドメイン直感から着手順を推定すると外れるため、必ず本フェーズの出力で確定させる。**毎セッションでは走らせない** (再生成条件は [references/dependency-mapping.md](references/dependency-mapping.md))。
 
 実行 CLI (`map_flow_dependencies.py`)・出力 `flow-dependencies.md` のセクション構成と消費者は [references/dependency-mapping.md](references/dependency-mapping.md) を Read で取得。
 
@@ -122,7 +124,7 @@ Tableau Server/Cloud 上の **publish 先プロジェクト階層** を REST API
 | 後段 Skill | 渡すファイル |
 |---|---|
 | prep-architect (analyze / decompose) | `flow-summary.md` + `deploy-context.md` + `input-dispatch-mech.json` (+ 複数フロー移行時は `flow-dependencies.md`) |
-| prep-builder | `decomposition-plan.md`（prep-architect 出力） |
+| prep-builder | `decomposition-plan-<flow>.json`（prep-architect 出力、設計の正） |
 | prep-deployer (preflight) | `deploy-context.md` |
 | prep-deployer (publish) | `flows/**/*.tfl` + `flows/staging/*.augmenter.json` + `deploy-context.md` |
 

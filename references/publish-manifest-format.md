@@ -36,15 +36,15 @@ CLI は repo 直下 [scripts/publish_manifest.py](../scripts/publish_manifest.py
   "session_work_dir": "work/20260517_stock-market-prep",
   "original": {
     "flow_name": "Stock Market Transaction Prep",
-    "flow_luid": "84d06013-e571-49c2-b950-233e4cb36933",
+    "flow_luid": "aaaaaaaa-0000-0000-0000-000000000001",
     "outputs": [
       {
         "name": "stockmarket_transaction_prepped",
-        "luid": "fcaaa8ec-786b-4be8-bb34-aba29bdb0cbb"
+        "luid": "aaaaaaaa-0000-0000-0000-000000000002"
       },
       {
         "name": "stockmarket_transaction_detailed_prepped",
-        "luid": "5d17b2e3-bfc6-4299-8a35-7d4e843b47c2"
+        "luid": "aaaaaaaa-0000-0000-0000-000000000003"
       }
     ]
   },
@@ -57,7 +57,7 @@ CLI は repo 直下 [scripts/publish_manifest.py](../scripts/publish_manifest.py
       "source_original_output_name": "stockmarket_transaction_prepped",
       "publish": {
         "status": "published",
-        "flow_luid": "a740445c-eed7-4f10-a5f7-ebdc507f1d80",
+        "flow_luid": "aaaaaaaa-0000-0000-0000-000000000004",
         "published_at": "2026-05-19T09:30:00+09:00"
       },
       "run": {
@@ -68,7 +68,7 @@ CLI は repo 直下 [scripts/publish_manifest.py](../scripts/publish_manifest.py
       "outputs": [
         {
           "name": "fct_transactions_summary",
-          "luid": "474dbbf2-0e48-4013-85cd-225ea9ce074c"
+          "luid": "aaaaaaaa-0000-0000-0000-000000000005"
         }
       ]
     },
@@ -80,7 +80,7 @@ CLI は repo 直下 [scripts/publish_manifest.py](../scripts/publish_manifest.py
       "source_original_output_name": null,
       "publish": {
         "status": "published",
-        "pds_luid": "8b3e4a2c-...",
+        "pds_luid": "aaaaaaaa-0000-0000-0000-000000000006",
         "published_at": "2026-05-24T11:05:00+09:00"
       },
       "run": {
@@ -91,7 +91,7 @@ CLI は repo 直下 [scripts/publish_manifest.py](../scripts/publish_manifest.py
       "outputs": [
         {
           "name": "stg_vconn__transactions",
-          "luid": "8b3e4a2c-..."
+          "luid": "aaaaaaaa-0000-0000-0000-000000000006"
         }
       ]
     }

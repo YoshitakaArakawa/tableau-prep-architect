@@ -1,27 +1,25 @@
 ---
 name: prep-migration-planner
-description: 複数フロー移行または横断工程 (スケジュール設計 / Workbook 参照置換 / PDS backfill) を含む Prep 分解プロジェクトで、scope・移行順・人間作業キュー・進捗を 1 枚に集約する移行計画書 (migration-plan.md + migration-plan.json) を生成し、工程の進行に合わせて更新する Skill。prep-extractor Phase C の後 (step 0c) に骨を作って Stop 1 でユーザー承認を取り、以降は各工程完了時に main agent が status と決定を埋めていく progressive-fill 台帳で、セッション横断の resume state も兼ねる。ユーザーが「移行計画を作って」「計画書を出して」「移行の段取りを整理して」と言ったとき、または goal が Cloud publish 以降で横断工程を含む・対象フローが複数のときに起動する。フロー内設計 (命名 / レイヤ / Input policy) には踏み込まない (それは prep-architect の decomposition-plan が正)。Cloud 副作用なし・ローカルのみ。
+description: 複数フロー移行または横断工程 (スケジュール設計 / Workbook 参照置換 / PDS backfill) を含む Prep 分解プロジェクトで、scope・移行順・人間作業キュー・進捗を 1 枚に集約する移行計画書 (migration-plan.md + migration-plan.json) を生成し、工程の進行に合わせて更新する Skill。prep-extractor Phase C の後 (step 0b) に骨を作って Stop 1 でユーザー承認を取り、以降は各工程完了時に main agent が status と決定を埋めていく progressive-fill 台帳で、セッション横断の resume state も兼ねる。ユーザーが「移行計画を作って」「計画書を出して」「移行の段取りを整理して」と言ったとき、または対象フローが複数・横断工程 (Q2b: schedule / repoint / backfill) を含むときに起動する。フロー内設計 (命名 / レイヤ / Input policy) には踏み込まない (それは prep-architect の decomposition-plan が正)。Cloud 副作用なし・ローカルのみ。
 ---
 
 # prep-migration-planner
 
 end-to-end 移行 (extract → decompose → build → publish → compare → schedule → repoint → backfill) を**プロジェクト単位でオーケストレーションする台帳** `migration-plan` (`.json` + `.md`) を生成・更新する Skill。**プロジェクト全体の割り付けと進捗**を扱い、フロー内設計 (命名・レイヤ・Input policy・Output mapping) には踏み込まない — それは `prep-architect` の `decomposition-plan-<flow>.json` が正 (§役割境界)。設計モデルは [references/orchestration-model.md](references/orchestration-model.md)、計画書のスキーマと md テンプレートは [references/plan-format.md](references/plan-format.md)。
 
-本 Skill は `context: fork` を **付けない**。理由は Stop 1 のユーザー承認・intake 回答の合成・後段への決定の受け渡し (courier) を**主会話コンテキストで**扱うため (`prep-deployer` / `prep-pds-backfiller` が承認・失敗観測のため fork しないのと同じ)。ただし本 Skill は**サーバー副作用が無く、生成物はローカルの `migration-plan.*` のみ**という点で書き込み系と異なる。fork しないので `## Timing` ブロックは返さない (主会話が内部時間を直接観測できる)。
-
-役割対称性の第 3 類型: 読み取り = prep-extractor + comparator + schedule-designer + workbook-repointer / 書き込み = prep-deployer (+ augmenter, backfiller) / **オーケストレーション = prep-migration-planner** (ローカル台帳のみ、決定を前方へ配る唯一のセッション横断 artifact)。
+本 Skill は `context: fork` を **付けない**。理由は Stop 1 のユーザー承認・intake 回答の合成・後段への決定の受け渡し (courier) を**主会話コンテキストで**扱うため (`prep-deployer` / `prep-pds-backfiller` が承認・失敗観測のため fork しないのと同じ)。ただし本 Skill は**サーバー副作用が無く、生成物はローカルの `migration-plan.*` のみ**という点で書き込み系と異なる。fork しないので `## Timing` ブロックは返さない (主会話が内部時間を直接観測できる)。オーケストレーション専任 (ローカル台帳のみ、決定を前方へ配る唯一のセッション横断 artifact) という位置付けは §役割境界 を参照。
 
 ## いつ呼ばれるか
 
 - **位置**: `step 0b` (`prep-extractor` Phase C の直後、`prep-architect` の analyze/decompose より前)。
-- **発動条件**: 忘れ防止の価値は **goal 段階**に、順序管理の価値は**フロー数**に依存する。この 2 軸で切る:
+- **発動条件**: 忘れ防止の価値は**横断工程 (Q2b)** に、順序管理の価値は**フロー数**に依存する。この 2 軸で切る:
 
-| | goal ①〜⑤ (横断工程なし) | goal ⑥/⑦ or backfill 意図あり (横断工程あり) |
+| | Q2b なし (横断工程なし) | Q2b あり (schedule・repoint・backfill のいずれか) |
 |---|---|---|
 | **単発フロー** | 作らない | **作る** (human_queue 中心の薄い版) |
 | **複数フロー** | 作る (scope / order / batch 管理) | 作る (フル) |
 
-「単発 × ⑤以下」だけが非作成ゾーン (⑤ compare までは Agent 自律で人間作業が無い)。⑥ (schedule) と ⑦ (repoint) は独立に選べる (片方だけのケースがある)。
+「単発 × Q2b なし」だけが非作成ゾーン (compare までは Agent 自律で人間作業が無い)。schedule と repoint は独立に選べる (片方だけのケースがある)。
 
 - **Stop 1 (薄い)**: init 直後に計画書初版を提示し**異論を受けるだけ**。重い明示確認は実質無い (scope は intake の追認、migration_order は機械導出の追認)。一気通貫を止めない。ユーザー応答は `OK` か `<セクション> <修正>`。
 - **Stop 1 と Stop 2 の境界**: Stop 1 = **プロジェクト割り付け** (scope / 順序 / バッチ / 横断工程の適用 / 人間作業の段取り)。Stop 2 = **フロー内設計** (`prep-architect` の `decomposition-plan`)。詳細は [references/orchestration-model.md](references/orchestration-model.md)。
@@ -55,7 +53,7 @@ python ${CLAUDE_SKILL_DIR}/scripts/init_plan.py \
   --flow-deps-json <output_dir>/flow-dependencies.json \
   --flow-deps-md <output_dir>/flow-dependencies.md \
   --deploy-context <output_dir>/deploy-context.md \
-  --goal <1-7> --target "<target path>" --flow-count multi \
+  --goal <1-5> --target "<target path>" --flow-count multi \
   --scope-in "<flowA>,<flowB>,<flowC>" [--scope-out "<flowD>"] \
   --crosscut "schedule,repoint" \
   [--session-batch "<tag1>:<flowA>,<flowB>" --session-batch "<tag2>:<flowC>"] \
@@ -64,13 +62,13 @@ python ${CLAUDE_SKILL_DIR}/scripts/init_plan.py \
 # 単発フロー: 生フロー 1 本を直読 (backfill 検出のため)
 python ${CLAUDE_SKILL_DIR}/scripts/init_plan.py \
   --flow <flow.json/.tfl> \
-  --goal 7 --target "<target path>" --flow-count single \
+  --goal 5 --target "<target path>" --flow-count single \
   --scope-in "<flow>" --crosscut "repoint" \
   --out <output_dir>/migration-plan.json
 ```
 
-- `--goal` は 1-7 の整数 (Q2 段階)。meta には表示ラベルが入る。
-- `--crosscut` は human_queue を組む横断工程 (`schedule` / `repoint` / `backfill` を任意個)。⑥⑦独立のため goal 整数からは導かず**明示指定**する。backfill 候補が検出されれば `backfill` は自動で human_queue に加わる。
+- `--goal` は 1-5 の整数 (Q2a 深度)。meta には表示ラベルが入る。
+- `--crosscut` は human_queue を組む横断工程 (`schedule` / `repoint` / `backfill` を任意個)。横断工程は Q2b (intake) から `--crosscut` にそのまま渡す。backfill 候補が検出されれば `backfill` は自動で human_queue に加わる。
 - backfill 候補は facts の incremental 列 (複数) または `get_incremental_config` (単発) から機械抽出される (`flow_io` の正準ロジック)。
 - scope / target / goal / batch は intake 由来。main agent が会話から確定して渡す (self-check は Stop 1 でユーザーが行う)。
 

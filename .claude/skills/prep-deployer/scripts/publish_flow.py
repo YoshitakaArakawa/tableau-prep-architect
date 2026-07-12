@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Publish a .tfl/.tflx to a target project on Tableau Server/Cloud.
 
-Runs non-interactively. Approval is taken at session intake (CLAUDE.md step 0
-"Q2 goal" + "Q4 target path"); see references/autonomous-recovery.md.
+Runs non-interactively. Approval is taken at session intake (prep-migrate step 0
+"Q2a goal" + "Q4 target path"); see references/autonomous-recovery.md.
 
 Usage:
     python publish_flow.py --file ./flows/staging/stg_orders.tfl \\

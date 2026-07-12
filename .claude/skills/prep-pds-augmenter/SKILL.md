@@ -47,7 +47,7 @@ Tableau Cloud / Server 上の Published Data Source (PDS) を **transforms** (re
 
 1 サイクル = (source 1 個: PDS LUID または vconn 参照) + (transforms M 個) + (calc spec N 個) → (target PDS 1 個 publish)。
 
-`augment_pds.py --spec spec.json --out-dir <dir>` で起動。spec.json の全フィールド (source 3 種別の必須/任意、transforms / calcs / source.columns / 出力ファイル一覧) は [references/spec-format.md](references/spec-format.md) を参照。
+`python ${CLAUDE_SKILL_DIR}/scripts/augment_pds.py --spec spec.json --out-dir <dir>` で起動。spec.json の全フィールド (source 3 種別の必須/任意、transforms / calcs / source.columns / 出力ファイル一覧) は [references/spec-format.md](references/spec-format.md) を参照。
 
 ### 副作用と承認
 
@@ -78,14 +78,14 @@ spec 検証 → base .tdsx 取得 (extract/live は DL / vconn は caller 提供
 | 「Live PDS の <列> を `<新名>` にリネームして」 | `transforms[]` の `rename` op で spec を組む |
 | 「Live PDS の <列> を `<型>` にキャストして」 | `transforms[]` の `cast` op (元列を hide + cast calc を新列として注入)。caller に `to_caption` を確認 |
 | 「Live PDS の <列> を非表示にして」 | `transforms[]` の `hide` op |
-| 「stg PDS を <vconn 元 PDS> から作って」 (既存 Live PDS から) | `kind: live` で rename + cast + hide を組合せた `transforms[]` を構築 |
-| 「分解元 Prep の vconn 入力から stg PDS を作って」 (既存 base PDS なし) | `kind: vconn` で `vconn_luid` / `table_uuid` / `table_name` / `columns[]` を caller (= 通常 prep-builder) から受け取り、transforms[] と共に spec 化。caller が flow.json の Input ノードから列メタを揃える前提 |
+| 「既存 Live PDS を base に stg PDS を作って」 (**base PDS が既にある**) | `kind: live` で rename + cast + hide を組合せた `transforms[]` を構築。rename は caption-only なので**下流 Prep は旧 local-name のまま読む** (kind:vconn との対比) |
+| 「分解元 Prep の vconn 入力から stg PDS を作って」 (**既存 base PDS なし**) | `kind: vconn` で `vconn_luid` / `table_uuid` / `table_name` / `columns[]` を caller (= 通常 prep-builder) から受け取り、transforms[] と共に spec 化。caller が flow.json の Input ノードから列メタを揃える前提。rename は true rename なので**下流 Prep も新名で読める** (kind:live との対比) |
 
 caller が calc 仕様 (caption / formula / datatype)、transforms 仕様 (column_name / to_caption / to_datatype)、vconn 列メタ (name / caption / datatype) を提示しない場合は **聞き返す** (auto-detect しない)。formula は業務知識依存、naming は規約依存、vconn 列スキーマは flow.json or vconn schema API 依存のため Skill 側で推論しない。
 
 ## 認証
 
-`.env` の `SERVER` / `SITE_NAME` を読み、OAuth 2.0 (Authorization Code + PKCE) でブラウザサインイン。Repo 直下 `tableau_auth.py` の `signed_in_server()` を import。詳細は [prep-deployer/references/authentication.md](../prep-deployer/references/authentication.md)。
+OAuth 2.0 (Authorization Code + PKCE) のブラウザサインイン。詳細は [prep-deployer/references/authentication.md](../prep-deployer/references/authentication.md)。
 
 ## Scripts
 
@@ -93,6 +93,6 @@ caller が calc 仕様 (caption / formula / datatype)、transforms 仕様 (colum
 |---|---|
 | `scripts/augment_pds.py` | spec を読み、DL → transforms 適用 → calc inject → publish → verify を一気通貫実行 (非対話、終了時に RESULT_JSON 行を emit) |
 
-スクリプトは単独で動く: Skill 経由でも、ユーザーが `python augment_pds.py --spec spec.json --out-dir <dir>` で直接呼んでも同じ動作。失敗は握り潰さない (HTTP status / 検証結果をそのまま caller に返す)。
+スクリプトは単独で動く: Skill 経由でも、ユーザーが `python ${CLAUDE_SKILL_DIR}/scripts/augment_pds.py --spec spec.json --out-dir <dir>` で直接呼んでも同じ動作。失敗は握り潰さない (HTTP status / 検証結果をそのまま caller に返す)。
 
 設計原則は §スコープ (含む / 含まない)・§動作モデル (副作用と承認)・§ワークフロー に集約済み — 別リストとして再掲しない。

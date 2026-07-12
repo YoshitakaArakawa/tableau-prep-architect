@@ -27,7 +27,7 @@ Usage:
 
     # single-flow
     python init_plan.py --flow work/session/flow.json \
-        --goal 7 --target "99_Sandbox/x_decompose" --flow-count single \
+        --goal 5 --target "99_Sandbox/x_decompose" --flow-count single \
         --scope-in "A" --crosscut "repoint" --out reports/migration-plan.json
 """
 
@@ -45,15 +45,13 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from flow_io import get_incremental_config  # noqa: E402
 
-# Q2 の goal 段階 (CLAUDE.md Session intake) を表示ラベルに対応させる
+# Q2a の goal 深度 (prep-migrate Session intake) を表示ラベルに対応させる
 GOAL_LABELS = {
     1: "① 分析のみ",
     2: "② 分解設計まで",
     3: "③ .tfl 生成まで",
     4: "④ publish & run まで",
     5: "⑤ E2E 比較まで",
-    6: "⑥ スケジュール設計・検証まで",
-    7: "⑦ Workbook repoint 設計・検証まで",
 }
 # JST 固定 (個人ルール: 時刻は JST、日付は YYYYMMDD)
 JST = timezone(timedelta(hours=9))
@@ -149,8 +147,8 @@ def main() -> int:
                    help="single: one raw flow (.tfl/.tflx/flow.json) for backfill detection")
     p.add_argument("--flow-deps-md", type=Path, help="pointer for migration_order.source")
     p.add_argument("--deploy-context", type=Path, help="pointer for pointers.deploy_context")
-    p.add_argument("--goal", type=int, required=True, choices=range(1, 8),
-                   help="Q2 goal stage 1-7")
+    p.add_argument("--goal", type=int, required=True, choices=range(1, 6),
+                   help="Q2a goal stage 1-5")
     p.add_argument("--target", required=True, help="target project path")
     p.add_argument("--flow-count", required=True, choices=("single", "multi"))
     p.add_argument("--scope-in", required=True, help="in-scope flows, comma-separated")

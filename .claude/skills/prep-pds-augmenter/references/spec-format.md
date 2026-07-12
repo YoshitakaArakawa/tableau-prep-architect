@@ -52,18 +52,18 @@ note: SKILL.md からはこの reference にリンクし、本ファイルは sp
     "kind": "vconn",
     "vconn_luid": "<vconn-luid>",
     "vconn_caption": "Google Drive Tables",
-    "table_uuid": "6a392323-6ff7-56e3-afa5-6bf35133447a",
+    "table_uuid": "aaaaaaaa-0000-0000-0000-000000000001",
     "table_name": "TableauPublic",
     "columns": [
-      { "name": "[71773dea-8ab7-31a8-824e-1adaa86101a0]", "caption": "Workbook Repo Url", "datatype": "string" },
-      { "name": "[10f83648-b8ca-3e2d-bb8b-bb11e8a1ea7d]", "caption": "View Count",        "datatype": "integer" }
+      { "name": "[bbbbbbbb-0000-0000-0000-000000000002]", "caption": "Workbook Repo Url", "datatype": "string" },
+      { "name": "[cccccccc-0000-0000-0000-000000000003]", "caption": "View Count",        "datatype": "integer" }
     ]
   },
   "target": { "project_id": "<target-project-luid>", "new_name": "stg_vconn__tableau_public" },
   "mode": "CreateNew",
   "transforms": [
-    { "op": "rename", "column_name": "[71773dea-8ab7-31a8-824e-1adaa86101a0]", "to_caption": "workbook_repo_url" },
-    { "op": "cast",   "column_name": "[10f83648-b8ca-3e2d-bb8b-bb11e8a1ea7d]", "to_caption": "view_count", "to_datatype": "real" }
+    { "op": "rename", "column_name": "[bbbbbbbb-0000-0000-0000-000000000002]", "to_caption": "workbook_repo_url" },
+    { "op": "cast",   "column_name": "[cccccccc-0000-0000-0000-000000000003]", "to_caption": "view_count", "to_datatype": "real" }
   ]
 }
 ```

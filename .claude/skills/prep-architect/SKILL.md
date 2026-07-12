@@ -1,9 +1,9 @@
 ---
 name: prep-architect
-description: prep-extractor が生成した flow-summary.md を入力に、Tableau Prep の長大フローを dbt 流のレイヤ規律で分析・分解設計する。analyze（現状把握）と decompose（分解設計）の 2 フェーズを、ユーザー指示に応じて順次または個別に実行する。既存の .tfl/.tflx を「分析したい」「分解したい」「dbt 風に再構築したい」「最適化したい」と言われたときに起動。実装（.tfl 生成）は prep-builder、publish 以降は prep-deployer が担当。
+description: prep-extractor が生成した flow-summary.md を入力に、Tableau Prep の長大フローを dbt 流のレイヤ規律で分析・分解設計する。analyze（現状把握）と decompose（分解設計）の 2 フェーズを、ユーザー指示に応じて順次または個別に実行する。既存の .tfl/.tflx を「分析したい」「分解したい」「dbt 風に再構築したい」「最適化したい」と言われたときに起動。実装（.tfl 生成）は prep-builder、publish 以降は prep-deployer が担当。移行セッション冒頭の intake・goal ゲート・起動順序は prep-migrate が正典（本 Skill 単体で移行セッションを始めない）。
 context: fork
-agent: claude
-model: claude-sonnet-5
+agent: general-purpose
+model: sonnet
 allowed-tools: Read Write Edit Glob Grep Bash(python *)
 ---
 
@@ -31,7 +31,7 @@ Tableau Prep のフローを dbt 流のレイヤ規律（stg / intermediate / ma
 | `flow_summary_path` | ✅ | prep-extractor が出力した `flow-summary.md` のパス |
 | `deploy_context_path` | decompose で推奨 | prep-extractor Phase B の `deploy-context.md`。既存 flow 名衝突回避 + passthrough Input の PDS LUID 解決に使う |
 | `input_dispatch_mech_path` | decompose で **必須** | prep-extractor Phase B の `input-dispatch-mech.json`。各 Input の kind / fields / 解決済 LUID を読み、policy 提案 + stg rename (元名ピン留め) + provisioning 案を decompose 内で組み立てる |
-| `analysis_path` | decompose のみで使うなら | analyze 結果がある場合のみ |
+| `analysis_path` | 任意 | analyze を実施済みなら `analysis-<flow>.md` のパス。**decompose 単独 (analyze 未実施) では不要** — `flow-summary.md` + `input-dispatch-mech.json` だけで decompose は成立する |
 | `flow_dependencies_path` | 任意 (複数フロー移行時に推奨) | prep-extractor Phase C の `flow-dependencies.md`。pds 入力の出所分類 (in-scope 出力 = 暫定 passthrough) と stg 再利用判断 (self-check 項目 15) に使う。無ければ deploy-context から推定し `未確認` ラベル |
 | `output_dir` | ✅ | `analysis-<flow>.md` / `decomposition-plan-<flow>.json` + `.md` の出力先 (典型: `work/<yyyymmdd>_<tag>/reports/`)。レポート類は [CLAUDE.md §work/ ディレクトリ規約](../../../CLAUDE.md#work-ディレクトリ規約) の `reports/` に集約 |
 | `source_tfl_path` | decompose で必須 | 元 .tfl/.tflx (または展開済み flow.json)。decompose のスクリプト入力 (本文は読まない) |

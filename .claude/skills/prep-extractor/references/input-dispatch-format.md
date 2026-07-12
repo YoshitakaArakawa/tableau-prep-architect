@@ -50,8 +50,8 @@ note: トップレベル構造と per-Input record のスキーマ、kind 別の
 
 ```jsonc
 {
-  "name_raw": "9dc73cbd-8280-35c8-8406-cec646dcf77d",
-  "name_bracketed": "[9dc73cbd-8280-35c8-8406-cec646dcf77d]",
+  "name_raw": "aaaaaaaa-0000-0000-0000-000000000001",
+  "name_bracketed": "[aaaaaaaa-0000-0000-0000-000000000001]",
   "caption": "数量",
   "datatype": "integer"
 }
@@ -71,7 +71,7 @@ note: トップレベル構造と per-Input record のスキーマ、kind 別の
   "dbname": "stockmarket_data_prepped_17570800516990",
   "resolution": {
     "status": "resolved",
-    "luid": "f1390b46-c0de-42e1-a470-974722e0800d",
+    "luid": "bbbbbbbb-0000-0000-0000-000000000002",
     "project_path": "0_Datasource"
   }
 }
@@ -89,15 +89,15 @@ note: トップレベル構造と per-Input record のスキーマ、kind 別の
 
 ```jsonc
 "vconn": {
-  "vconn_luid": "72b2ce16-b481-4088-9749-8a3593b92976",
+  "vconn_luid": "cccccccc-0000-0000-0000-000000000003",
   "vconn_caption": "Google Drive Tables",
-  "table_uuid": "16bb67b3-17c6-4f8b-8e22-97f4dde8d16c",
+  "table_uuid": "dddddddd-0000-0000-0000-000000000004",
   "table_name": "Transactions"
 },
 "augmenter_columns_hint": [
   {
-    "name": "[e9143b20-3eb0-3e15-96fe-abc98655b63c]",
-    "remote_name": "e9143b20-3eb0-3e15-96fe-abc98655b63c",
+    "name": "[eeeeeeee-0000-0000-0000-000000000005]",
+    "remote_name": "eeeeeeee-0000-0000-0000-000000000005",
     "caption": "取引",
     "datatype": "string"
   },

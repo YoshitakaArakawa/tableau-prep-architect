@@ -36,7 +36,7 @@ note: 手順そのものは SKILL.md、出力フォーマットは repoint-forma
 
 ## 右辺: 旧→新 PDS の join キー
 
-新 PDS への対応は publish-manifest ([../../../references/publish-manifest-format.md](../../../references/publish-manifest-format.md)) から引く。
+新 PDS への対応は publish-manifest ([../../../../references/publish-manifest-format.md](../../../../references/publish-manifest-format.md)) から引く。
 manifest の `decomposed_flows[].source_original_output_name` が **旧 output PDS 名 → 分解後フロー**
 の 1:1 リンク (直感と逆の対応も機械確定される)。join の連鎖:
 
@@ -107,5 +107,3 @@ overall は全 WB が `reflected` のときだけ `PASS`、それ以外は `INCO
 | 薄い行数 (baseline-forward) の gating | 持たない (migration 側の関心事) |
 
 本 Skill は **lineage 差し替えの設計 (design) と反映検証 (verify) に専念** する read-only Skill。
-役割対称性: 読み取り = prep-extractor + prep-output-comparator + prep-schedule-designer +
-prep-workbook-repointer / 書き込み = prep-deployer (+ augmenter, backfiller)。

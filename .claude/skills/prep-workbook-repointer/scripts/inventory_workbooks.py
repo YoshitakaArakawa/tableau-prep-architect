@@ -18,7 +18,7 @@ carried forward as groundwork for the future .twb-surgery option (design.json
 back-key); it is not used by the runbook or by verify.
 
 Usage:
-    python inventory_workbooks.py --source-project 0_Datasource \
+    python inventory_workbooks.py --source-project <source-project-name> \
         --manifest <publish-manifest_1.json> [--manifest <...> ...] \
         --out <output_dir>/repoint-inventory.json
 
@@ -128,8 +128,8 @@ def resolve_content_urls(server: Any, ds_luids: dict[str, str]) -> dict[str, dic
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--source-project", default="0_Datasource",
-                    help="Project name whose PDS are the repoint sources (default: 0_Datasource)")
+    ap.add_argument("--source-project", required=True,
+                    help="Project name whose PDS are the repoint sources (site-specific; no default)")
     ap.add_argument("--manifest", action="append", default=[], dest="manifests",
                     help="publish-manifest.json path (repeatable) — used to resolve new-PDS content_url")
     ap.add_argument("--out", required=True, help="Write repoint-inventory.json here")

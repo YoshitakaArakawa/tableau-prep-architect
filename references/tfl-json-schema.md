@@ -311,7 +311,7 @@ PublishExtract ノードの典型構造:
 }
 ```
 
-各レイヤの flow の PublishExtract Output は、その flow が置かれる layer project と同じ場所に書く (stg flow → `<target>/stg` PDS / int → `<target>/intermediate` / marts → `<target>/marts`)。`projectLuid` は `deploy-context.md` (prep-extractor Phase B 出力) から取得。`datasourceName` は flow 名と一致 (例 `stg_transactions` → `stg_transactions` PDS)。
+各レイヤの flow の PublishExtract Output は、その flow の layer に対応する **`datasources/<layer>` プロジェクト** に書く (stg → `<target>/datasources/stg` / int → `<target>/datasources/intermediate` / marts → `<target>/datasources/marts`。[project-hierarchy.md](project-hierarchy.md))。`projectLuid` は build 時に **plan.json の `ds_projects.<layer>.luid` から取る** (`gen_plan_skeleton` が preflight → Phase B 再実行後の `deploy-context.md` から充填。[plan-json-schema.md](plan-json-schema.md))。`datasourceName` は flow 名と一致 (例 `stg_transactions` → `stg_transactions` PDS)。
 
 ### SuperTransform を actions 単位で分割
 

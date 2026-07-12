@@ -45,7 +45,7 @@ set_incremental_refresh(
 
 これは `flow["nodeProperties"]` に `IncrementalConfiguration` (入力) + `OutputRefreshOptions` (出力、append/append) を書き込む。build ヘルパは append/append のみ対応 (実証済みの組合せに限定)。
 
-**運用上の重要な注意 (プラン Migration order + publish-recipe に反映)**:
+**運用上の重要な注意**:
 
-- **append 出力は full run で重複する**。初回だけ full run で baseline を作り (新規 PDS = 現スナップショット 1 バッチ)、**以後は必ず incremental run** (`run_flow.py --incremental`)
+- **run 規律** (append 出力を full run に当てると多重化する / 初回だけ full run で baseline → 以後 `run_flow.py --incremental`) は publish フェーズの正典 [publish-recipe.md §append / incremental フローの run 規律](../../prep-deployer/references/publish-recipe.md) に従う。ここでは build 側の含意のみ記す
 - 元 PDS が過去の累積履歴を持つ場合、それは現ソースに残っていないので継承層 (既定 int) の新 PDS には初回 baseline 分しか入らない。**build 時の既定は baseline-forward** (旧 PDS はアーカイブ残置、plan 項目 16)。履歴 seed が必要なら移行後の別工程 [prep-pds-backfiller](../../prep-pds-backfiller/SKILL.md) で行う (build には含めず、ユーザー明示要求 + ゲート付き)
