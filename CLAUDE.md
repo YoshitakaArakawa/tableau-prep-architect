@@ -19,8 +19,8 @@
                                        → deploy-context.md + input-dispatch-mech.json (Cloud 読み取りのみ)
 [step 0b]  prep-deployer preflight     pending segments + flows/・datasources/ × dbt 3 レイヤを idempotent 作成
            prep-architect analyze      現状把握 → analysis-<flow>.md
-           prep-architect decompose    分解設計 → decomposition-plan-<flow>.json (設計の正) + .md (レビュー用レンダリング)
-★ Stop 2 ユーザー確認 (1 ターン) ★     plan の Tier 1 を明示確認、OK で build へ
+           prep-architect decompose    分解設計 → decomposition-plan-<flow>.json (設計の正) + .md/.html (レビュー用レンダリング)
+★ Stop 2 ユーザー確認 (1 ターン) ★     plan の Tier 1 を明示確認 (.html をブラウザで開いて視覚レビュー)、OK で build へ
                                        ([review-checkpoints](.claude/skills/prep-architect/references/review-checkpoints.md))
            prep-builder build          plan → 新 .tfl 群 + augmenter spec、publish-manifest.json を init
            prep-deployer publish+run   レイヤ単位 (stg → int → marts) に publish → run → finishCode=0 確認。
