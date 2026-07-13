@@ -1,4 +1,11 @@
-# .codex/config.toml — tableau-prep-architect のプロジェクト単位 Codex 設定
+# .codex/config.toml.template — tableau-prep-architect のプロジェクト単位 Codex 設定のテンプレート
+#
+# ■ 使い方
+#   このファイルを同じディレクトリに config.toml という名前でコピーし、
+#   自環境の値を埋めて使う。config.toml は .gitignore 済み (マシン固有の
+#   MCP コマンドパス等を commit しないため。.env / .env.template と同じ運用):
+#
+#     cp .codex/config.toml.template .codex/config.toml
 #
 # ■ trust ゲート (最重要)
 #   このファイルおよび .codex/agents/*.toml は、プロジェクトが「trusted」の
