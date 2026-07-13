@@ -1,0 +1,45 @@
+# .codex/config.toml.template — tableau-prep-architect のプロジェクト単位 Codex 設定のテンプレート
+#
+# ■ 使い方
+#   このファイルを同じディレクトリに config.toml という名前でコピーし、
+#   自環境の値を埋めて使う。config.toml は .gitignore 済み (マシン固有の
+#   MCP コマンドパス等を commit しないため。.env / .env.template と同じ運用):
+#
+#     cp .codex/config.toml.template .codex/config.toml
+#
+# ■ trust ゲート (最重要)
+#   このファイルおよび .codex/agents/*.toml は、プロジェクトが「trusted」の
+#   ときのみ Codex に読み込まれる。untrusted のプロジェクトでは黙って無視され、
+#   ここに書いた MCP 構成もサブエージェント定義も一切効かない。
+#   ユーザーの Codex 設定 (~/.codex/config.toml) 側で、このリポジトリのパスを
+#   trusted に登録する必要がある:
+#
+#     [projects."/path/to/tableau-prep-architect"]
+#     trust_level = "trusted"
+#
+#   ※ 上のパスはプレースホルダ。各自のクローン先の絶対パスに置き換える
+#     (フォワードスラッシュ表記でよい)。
+#
+# ■ Tableau MCP サーバー構成 (下記テンプレート参照)
+#   Skill 群のうち parity 比較 (prep-output-comparator) や後工程は Tableau MCP の
+#   ツール (mcp__tableau__list-datasources / get-datasource-metadata /
+#   query-datasource) を使う。これらを Codex から使うには MCP サーバーを登録する。
+#   ただし本リポジトリは特定の Tableau MCP 実装・起動コマンドを規定しない
+#   (パッケージ名・配布形態はユーザー環境に依存するため)。下のテンプレートは
+#   全行コメントアウトしてある。有効化するときはコメントを外し、各フィールドを
+#   自分の環境の Tableau MCP 実装に合わせて埋める。
+#
+#   注意: [mcp_servers.<name>] セクションは stdio 起動なら `command` が必須。
+#   `command` の無い空セクションを有効行で置くと Codex が起動時にエラーになる。
+#   そのため未使用時は必ず全行コメントアウトのままにすること。
+
+# [mcp_servers.tableau]
+# # 実行コマンド (必須)。<TABLEAU_MCP_COMMAND> はプレースホルダ。
+# # ユーザー環境の Tableau MCP 実装の起動方法に合わせて置き換える
+# # (例: node 実装なら "node"、パッケージランナー経由なら "npx" 等)。
+# command = "<TABLEAU_MCP_COMMAND>"
+# # コマンド引数 (任意)。<TABLEAU_MCP_ARGS> は実装のエントリポイント等に置き換える。
+# args = ["<TABLEAU_MCP_ARGS>"]
+# # 環境変数 (任意)。認証まわりは .env (SERVER / SITE_NAME) と整合させる。
+# # 実際に必要なキーは使用する Tableau MCP 実装のドキュメントに従う。
+# # env = { SERVER = "https://example.tableau.com", SITE_NAME = "your-site" }

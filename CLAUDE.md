@@ -50,3 +50,13 @@
 ## 認証情報の運用
 
 REST 認証は OAuth 2.0 (Authorization Code + PKCE) のブラウザサインイン。`.env` は `SERVER` / `SITE_NAME` のみ (secret を持たない、[.env.template](.env.template) 参照、実 `.env` は `.gitignore` 済)。実装は [scripts/tableau_auth.py](scripts/tableau_auth.py) (`signed_in_server()`)、`access_token` は `.auth-cache/session.json` にキャッシュ。詳細運用 (logout / status / CI 向け PAT 切り出し等) は [prep-deployer/references/authentication.md](.claude/skills/prep-deployer/references/authentication.md)。
+
+## Codex 対応
+
+OpenAI Codex ユーザー向けの入口を別途持つ。Skill の正典は `.claude/skills/` のままで、Codex 向けは薄い wrapper + 読み替え方式:
+
+- [AGENTS.md](AGENTS.md) — Codex エントリポイント。この CLAUDE.md と同内容の規範 + Claude Code 固有記法 (`context: fork` / `model` / `${CLAUDE_SKILL_DIR}` 等) の読み替え表を持つ
+- `.agents/skills/<name>/SKILL.md` — 11 個の thin wrapper。正典 SKILL.md へのリンクと実行モード指示のみ (`scripts/sync_agents_skills.py` で生成)
+- `.codex/` — trust ゲート・MCP テンプレート・サブエージェント定義 (flow-worker / flow-worker-lite)。trusted プロジェクトでのみ有効
+
+この CLAUDE.md (起動規則・Skill 構成・work/ 規約・repo 構造・認証) や Skill の `description` を変更したら、AGENTS.md と wrapper の同期を取り、`python scripts/sync_agents_skills.py --check` (exit 0 = 同期済み) で検証する。

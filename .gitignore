@@ -40,6 +40,8 @@ venv/
 # MCP server config — may contain tokens / personal endpoints
 .mcp.json
 !.mcp.json.template
+.codex/config.toml
+!.codex/config.toml.template
 
 # OAuth session cache (access_token, site_name). Bearer token — NEVER commit.
 /.auth-cache/
