@@ -279,6 +279,7 @@ PDS dataConnection エントリ (`dataConnections[<dconn-id>]`):
 - run 時には実 dbname が必要 (= 不一致だと `Input data source not found` 系で finishCode=1)
 - Tableau Cloud は新規 publish された PDS に `<datasourceName>_<17桁ハッシュ>` 形式の物理 hyper 名を割り振る (ビルド時点では未確定)
 - ヘルパ (`flow_io.add_pds_input`) は `dbname=None` 渡しても `<datasourceName>_placeholder` を自動挿入するので publish は通る。run 前に prep-deployer の `discover_pds_dbname.py` で上流 PDS の実 dbname を解決して patch する
+- 既存フローの `dbname` は **旧名の残骸のことがある** (PDS が rename されても dbname は追従せず、実在しない名前を保持し続ける)。フローの実参照先を判定するときは `datasourceName` + `projectName` を正とし、dbname から逆推定しない
 
 ### LoadHyper (ローカル `.hyper` 参照、Cloud では使えない)
 

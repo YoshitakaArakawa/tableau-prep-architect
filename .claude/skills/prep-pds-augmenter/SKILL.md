@@ -59,7 +59,9 @@ Tableau Cloud / Server 上の Published Data Source (PDS) を **transforms** (re
 | publish (Overwrite) | 既存 PDS の破壊的更新 | より強い承認が必要。デフォルト挙動にしないため明示 `mode=Overwrite` 必須 (vconn では使用不可) |
 | 再 DL 検証 | Cloud 読み取りのみ | 不要 |
 
-`Overwrite` は対象 PDS を消費している既存 workbook を破壊する可能性があるため、caller が下流影響を理解した上で指定すること。
+`Overwrite` は対象 PDS を消費している既存 workbook を破壊する可能性があるため、caller が下流影響を理解した上で指定すること。同名 + 同プロジェクトの Overwrite は **LUID を保持** する (下流 flow の Input 束縛・スケジュール参照は無傷)。
+
+**対象 PDS の接続が OAuth の場合** (Google Drive / BigQuery / Snowflake 等): publish に `TSC.ConnectionCredentials(name=<接続の OAuth username>, password="", embed=True, oauth=True)` を付けないと embed 済み認証情報が消え、次回リフレッシュ・クエリが認証エラーで落ちる。前提は実行ユーザー本人の Saved Credential (初回のみ UI で登録)。publish 後は `populate_connections` で `embed_password=True` を確認し、実クエリ 1 本で認証が通ることまで検証する。
 
 ## ワークフロー
 
