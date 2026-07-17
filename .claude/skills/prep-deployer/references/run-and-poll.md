@@ -12,7 +12,7 @@ publish 済みの Prep flow を REST API で実行し、ジョブステータス
 - REST API エンドポイント / tableauserverclient での等価コード / `finishCode` の意味
 - スクリプトの使い方 / Polling 設計 / 失敗時の `notes` フィールド
 - 並列実行と排他 (同一 OAuth session の制約と run_layer.py)
-- run 後の manifest 更新 / 全レイヤ完走後の resolve-luids / REST API バージョン
+- run 後の manifest 更新 / 全レイヤ完走後の resolve-luids / Linked Task の再実行と監視 / REST API バージョン
 
 ## REST API エンドポイント
 
@@ -52,6 +52,8 @@ Authorization: X-Tableau-Auth: <token>
   <notes>...</notes>
 </job>
 ```
+
+実行結果の取得は `GET /jobs/{job-id}` を正とする (`notes` にエラー全文が入る)。`GET /flows/{id}/runs` は環境によって 404 を返すため使わない。
 
 ## `tableauserverclient` での等価コード
 
@@ -208,6 +210,13 @@ python scripts/publish_manifest.py resolve-luids \
 - `decomposed_flows[].outputs[].luid` (Metadata API)
 
 LUID が揃った manifest は [prep-output-comparator](../../prep-output-comparator/SKILL.md) がそのまま消費する。manifest 形式は [../../../../references/publish-manifest-format.md](../../../../references/publish-manifest-format.md)。
+
+## Linked Task の再実行と監視
+
+Linked Task の作成は UI 専用だが、再実行は REST でできる:
+
+- `POST /tasks/linked/{linked-task-id}/runNow` で Linked Task 全体を再実行
+- 進捗・失敗は `GET /tasks/linked` の step 毎 `consecutiveFailedCount` と、各 step の出力 PDS の `updatedAt` で追う。jobs 一覧 (`GET /jobs`) は RunFlow ジョブを取りこぼすことがあるため、これのみに依存しない
 
 ## REST API バージョン
 

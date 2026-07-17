@@ -124,6 +124,8 @@ python publish_flow.py --file stg_orders.tfl --project-path "..." --name "stg_or
 - 大きな変更は `CreateNew` + 別名で先に動作確認
 - 軽微な修正のみ `Overwrite`
 
+⚠️ **Overwrite の同一性判定は「名前 + プロジェクト」**。project にはその flow 自身が属するプロジェクトを指定する（output PDS のプロジェクト等を流用しない）。project を誤ると Overwrite にならず別プロジェクトに重複作成される。名前 + プロジェクトが一致した Overwrite は LUID を保持し、下流参照・スケジュール参照は無傷。
+
 ## Embed Credentials の扱い
 
 フローの入力／出力がどの種類かで、必要な追加情報が変わる：

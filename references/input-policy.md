@@ -28,6 +28,10 @@ dbt の `sources` 概念に相当。
 - **rename**: vconn source の true rename (local-name 書き換え + `<cols><map>`) でのみ成立。caption-only rename の stg は下流 run が "Unknown field name" で fail する。semantics の詳細は prep-pds-augmenter SKILL.md 参照
 - **cast / hide**: 下流 Prep から見た挙動は **未検証**。Prep 消費前提の stg にこれらの op を含める場合は Stop 2 で未検証リスクとして明示し、検証を挟むか実 .tfl 化を検討する
 
+## スキーマ変更前の下流 incremental 確認
+
+列名・型を変更する前に (stg に限らずどの層でも)、その列を参照する下流フローの incremental 設定を確認する: (a) `nodeProperties` の controlFieldName が変更対象列を参照していないか、(b) append 型 accumulator PDS のスキーマと不整合にならないか。下流が full-refresh のみなら列名変更は安全。
+
 ## 命名レジーム: 元の内部名を end-to-end 保持 (正典)
 
 分解後の各層が公開する列名は **元フローの内部名 (post-Input 命名。actions-split で stg に吸収した正規化 rename を含む) をそのまま保持** する。stg / int の列名を英語等へ意訳する semantic translation は **行わない**。

@@ -76,6 +76,7 @@ publish or run 実行
 |---|---|---|---|
 | `Input data source not found` / `Input ... not exist` | 上流 PDS が Cloud に未 publish (= 上流レイヤ未完走) | 上流レイヤを完走させてから再 run | prep-deployer |
 | `dbname` mismatch 系 | LoadSqlProxy の dbname が上流の実 Hyper 名と不一致 | `discover_pds_dbname.py` で実 dbname 取得 → `flow_io.patch_pds_dbname` で下流 .tfl 書き換え → 再 publish → 再 run | prep-builder / prep-deployer |
+| `Unknown field name` / `Can't find field` / join clause の field 欠落 / incremental 制御列欠落 | 上流 PDS の実列名と flow の参照名が不一致 (上流 rename の喪失・スキーマ drift)。接続障害でも metadata 反映ラグでもない | 上流 PDS の published .tds と flow.json を DL して列名を突合 → 不一致の側 (上流 PDS or .tfl) を修正 | prep-builder / caller |
 | `authentication error` / `authentication failed` | 仮想接続の DB 認証情報失効 | **escalation** | — |
 | `insufficient permission` / `permission denied` | サービスアカウントの出力先プロジェクト書き込み権限不足 | **escalation** | — |
 | `extract size exceeded` | サイト容量上限 | **escalation** | — |
