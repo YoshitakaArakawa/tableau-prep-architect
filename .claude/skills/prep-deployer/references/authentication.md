@@ -59,8 +59,7 @@ CLIENT_ID は UUID を都度生成（OAuth endpoint が要求するため）。C
 
 | 場所 | 用途 |
 |---|---|
-| **ユーザー作業フォルダ直下** (`<your-prep-project>/.env`) | 通常の使用ケース |
-| このリポジトリ直下 (`tableau-prep-architect/.env`) | このリポジトリ自身を開発・テストするとき |
+| **このリポジトリ直下** (`tableau-prep-architect/.env`) | 通常の使用ケース (リポを clone して中で移行を回す) |
 | Skill 内 | **使わない** |
 
 `tableau_auth.find_env_file()` は **現在ディレクトリから祖先方向に最大 6 階層** `.env` を探索する。見つかった最初のものを `load_dotenv()` する。

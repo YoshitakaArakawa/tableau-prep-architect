@@ -4,7 +4,7 @@
 
 ## リポ概要
 
-このリポジトリは Tableau Prep の長大化したフロー (.tfl/.tflx) を、dbt 流のレイヤ規律 (staging / intermediate / marts) で **分析・分解設計・再構築** するための Skill 集です。**dbt 自体は使いません**——コンセプトのみ転用します。設計思想・利用条件・スコープ外 (push-down 提案など) の詳細は [README.md](README.md#設計思想--使いどころ) を参照してください。
+このリポジトリは Tableau Prep の長大化したフロー (.tfl/.tflx) を、dbt 流のレイヤ規律 (staging / intermediate / marts) で **分析・分解設計・再構築** するための Claude Code / Codex エージェント環境です。個々の Skill 単体ではなく、**移行のオーケストレーション (prep-migrate の手順 + 起動規則 + work/ 規律 + 共通 scripts/references + Codex 入口) を一体にした作業環境**として、リポごと clone して中で移行セッションを回すことを想定します (中身を参考にするだけでも可)。**dbt 自体は使いません**——コンセプトのみ転用します。設計思想・利用条件・スコープ外 (push-down 提案など) の詳細は [README.md](README.md#設計思想--使いどころ) を参照してください。
 
 ## 起動規則 (最重要)
 
@@ -66,7 +66,7 @@ fork しない 5 Skill (prep-migrate / prep-migration-planner / prep-deployer / 
 
 このリポジトリ内で動くセッションの全成果物 (Skill 出力 / .tfl / build スクリプト) は `work/<yyyymmdd>_<tag>/` に集約します (`<tag>` は Session intake の Q3)。直下は **入力 (.tfl / flow.json) + 4 サブフォルダ (`reports/` `flows/` `scripts/` `scratch/`)** で固定し、ファイルの「役割」で分離します。各サブフォルダの責務・昇格ルールは [work/README.md](work/README.md)、規約全体は [CLAUDE.md](CLAUDE.md#work-ディレクトリ規約) を参照してください。git 追跡は `work/README.md` のみです。
 
-判定境界: 作業場所がこのリポジトリの内側なら `work/` 配下、外側 (ユーザー自身の Prep プロジェクト) ならそのプロジェクト直下です。**このリポジトリの直下に `flows/` / `models/` 等のデータディレクトリは作りません** (Skill 配布専用のため)。
+移行セッションはこのリポを clone した中で回し、全成果物は `work/<yyyymmdd>_<tag>/` 配下に隔離します。**このリポジトリの直下に `flows/` / `models/` 等のデータディレクトリは作りません** (データ実体は work/ に隔離し、追跡対象のリポ本体との混在を避けるため)。
 
 ## repo 構造・認証
 
