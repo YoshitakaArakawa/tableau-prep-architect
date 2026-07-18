@@ -196,10 +196,11 @@ def render_runbook(design: dict) -> str:
 
     lines: list[str] = []
     lines.append("---")
-    lines.append("title: Workbook Repoint 設計 (Desktop Replace Data Source 手順書)")
+    lines.append("title: Workbook Repoint 設計 (対応表 + Desktop fallback 手順)")
     lines.append(f"created_at: {design['created_at']}")
-    lines.append("scope: read-only 設計資料。接続の書き換えは人間が Tableau Desktop の "
-                 "Replace Data Source で行う。本 Skill は接続の API 書き換えをしない")
+    lines.append("scope: 設計資料。差し替えの既定は repoint モード (TWB 手術による自動差し替え、"
+                 "rehearsal → 承認 → production)。本書の Desktop 手順は手術不可ケース・"
+                 "権限制約時の fallback")
     lines.append(f"source_of_truth: publish-manifest.json ({', '.join(design['manifest_paths'])}) "
                  "+ Metadata API lineage inventory")
     lines.append(f"site: {design.get('server','')} / site {design.get('site_name','')!r}")
@@ -211,7 +212,10 @@ def render_runbook(design: dict) -> str:
         f"移行後、`{src_project}` 配下の旧 Published Data Source を参照する Workbook を、"
         "分解後フローが出力する新 marts PDS へ差し替えるための資料。**利用状況では絞り込んでいない** — "
         "デモ / 拡張系も含め、旧 PDS を参照する Workbook を全件掲載する (取捨は人間判断)。"
-        "差し替えは Tableau Desktop の **データソースの置換** で、新 PDS を *名前* で選んで行う。"
+        "差し替えの**既定は repoint モード** (TWB 手術による自動差し替え。rehearsal → 承認レポート → "
+        "production の段取りゲート付き)。手術が停止したケースや自動 republish を許可しない運用では、"
+        "下記手順どおり Tableau Desktop の **データソースの置換** (新 PDS を *名前* で選択) に "
+        "fallback する。"
     )
     lines.append("")
     lines.append(f"- 対象 Workbook: **{len(wb_order)} 件** / 旧→新 PDS ペア: **{len(pairs)} 件**")
@@ -219,7 +223,7 @@ def render_runbook(design: dict) -> str:
         lines.append(f"- ⚠️ 対応先が見つからない旧 PDS: **{len(unmapped)} 件** (末尾セクション)")
     lines.append("")
 
-    lines.append("## 差し替え手順 (全 Workbook 共通)")
+    lines.append("## Desktop 差し替え手順 (fallback 用・全 Workbook 共通)")
     lines.append("")
     lines.append("1. Tableau Desktop で対象 Workbook を開く (下表の URL から)")
     lines.append("2. メニュー [データ] → [データソースの置換]")

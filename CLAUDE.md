@@ -20,12 +20,12 @@
 | [prep-output-comparator](.claude/skills/prep-output-comparator/SKILL.md) | 元 PDS vs 分解後 PDS の列差分 + 全体行数差分を Markdown 出力 (fork) | ローカル / Cloud 読み取りのみ |
 | [prep-pds-augmenter](.claude/skills/prep-pds-augmenter/SKILL.md) | PDS への calc 注入 + column transforms (rename/cast/hide)。stg を Live PDS で表現する経路 | サーバー書込 (PDS publish) |
 | [prep-schedule-designer](.claude/skills/prep-schedule-designer/SKILL.md) | design (Linked Task 設計資料) / verify (UI 作成後にサーバー実測突合) (fork) | ローカル / Cloud 読み取りのみ |
-| [prep-workbook-repointer](.claude/skills/prep-workbook-repointer/SKILL.md) | design (旧 PDS 参照 WB 棚卸し + 旧→新 対応) / verify (Replace 後 lineage 突合) (fork) | ローカル / Cloud 読み取りのみ |
+| [prep-workbook-repointer](.claude/skills/prep-workbook-repointer/SKILL.md) | design (旧 PDS 参照 WB 棚卸し + 旧→新 対応) / repoint (TWB 手術で自動差し替え、リハーサル→承認→本番の段取りゲート付き) / verify (lineage 突合) (fork) | サーバー書込 (WB republish、repoint モードのみ) |
 | [prep-pulse-repointer](.claude/skills/prep-pulse-repointer/SKILL.md) | design (旧 PDS 参照 Pulse 定義 + follower 棚卸し) / repoint (コピー定義作成 + metric/購読再作成、rehearsal→承認→production の段取りゲート付き) / verify (実測突合) (fork) | サーバー書込 (Pulse 定義/購読作成、repoint モードのみ) |
 | [prep-pds-backfiller](.claude/skills/prep-pds-backfiller/SKILL.md) | incremental accumulator に旧 output PDS 履歴を seed。段取りゲート付き | サーバー書込 (本番 PDS Overwrite) |
 | [prep-migration-planner](.claude/skills/prep-migration-planner/SKILL.md) | 複数フロー/横断工程の scope・移行順・人間作業・進捗を migration-plan に集約 (fork なし) | ローカル |
 
-役割対称性: 読み取り = prep-extractor + prep-output-comparator + prep-schedule-designer + prep-workbook-repointer / 書き込み = prep-deployer (+ augmenter, backfiller, pulse-repointer の repoint モード) / オーケストレーション = prep-migrate (手順) + prep-migration-planner (セッション横断台帳)。
+役割対称性: 読み取り = prep-extractor + prep-output-comparator + prep-schedule-designer / 書き込み = prep-deployer (+ augmenter, backfiller, workbook-repointer / pulse-repointer の repoint モード) / オーケストレーション = prep-migrate (手順) + prep-migration-planner (セッション横断台帳)。
 
 ## work/ ディレクトリ規約
 
