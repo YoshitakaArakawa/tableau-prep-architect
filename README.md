@@ -55,7 +55,7 @@ dbt のベストプラクティスを Prep に転用しますが、Tableau Workb
 
 `prep-schedule-designer` は移行後の新フロー群の定期実行 (Linked Task) を設計・検証する読み取り専用 Skill です。Linked Task は Cloud UI 専用で REST 作成できないため、人間が UI でセットアップするための設計資料を出し、作成後にサーバー実測と突合します。
 
-`prep-workbook-repointer` は移行後、旧 PDS を参照する Workbook を新 marts PDS へ差し替える Skill です。design (設計資料の生成) / repoint (TWB 手術による自動差し替え。リハーサル publish → 証拠レポート承認 → 本番 Overwrite の段取りゲート付き。サーバー書込) / verify (lineage 反映の検証) の 3 モードを持ち、人間が Tableau Desktop の Replace Data Source で差し替える経路も runbook で支援します。
+`prep-workbook-repointer` は移行後、旧 PDS を参照する Workbook を新 marts PDS へ差し替える Skill です。design (設計資料の生成) / repoint (TWB 手術による自動差し替え。リハーサル publish → 証拠レポート承認 → 本番 Overwrite の段取りゲート付き。サーバー書込) / verify (lineage 反映の検証) の 3 モードを持ちます。差し替えの既定は repoint モードで、手術不可ケース・権限制約時のみ人間が Tableau Desktop の Replace Data Source で差し替える fallback を runbook で支援します。
 
 `prep-pds-backfiller` は移行完了後の**任意の後工程**です。incremental フローを分解すると新しい accumulator PDS は最新バッチしか持たないため、旧 output PDS にしか残っていない過去の累積履歴を hyper-level surgery で一度だけ seed します。取り消しにくい本番 Overwrite を含むので、dry-run → sandbox preview → 明示承認 → 本番 → 受け入れ incremental の段取りゲートを踏みます。
 
