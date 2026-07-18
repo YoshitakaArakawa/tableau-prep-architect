@@ -13,6 +13,8 @@ Skill 横断で使う共通モジュールと orchestrator。各 Skill 配下の
 | [publish_manifest.py](publish_manifest.py) | セッションの `reports/publish-manifest.json` の read/write/update CLI (`init` / `update-publish` / `update-run` / `resolve-luids`)。スキーマは references/publish-manifest-format.md | prep-builder (init), prep-deployer (update-publish / update-run / resolve-luids), prep-output-comparator (読み取り), run_layer.py |
 | [run_layer.py](run_layer.py) | manifest の 1 レイヤ内の未 run flow を `--no-wait` で一括発火し、単一サインインセッションで全 jobId を polling する run orchestrator (server-side 並列)。完了ごとに publish_manifest.py update-run を呼ぶ | prep-deployer (レイヤ単位 run) |
 | [sync_agents_skills.py](sync_agents_skills.py) | `.claude/skills/*/SKILL.md` の frontmatter から Codex 向け thin wrapper (`.agents/skills/`) を冪等生成。`--check` で drift 検知 (リポ保守用、Skill からは呼ばれない) | AGENTS.md / CLAUDE.md のメンテ手順 |
+| [pulse_api.py](pulse_api.py) | Tableau Pulse REST (`/api/-/pulse/...`) の共通クライアント。ページ追従つき definitions / subscriptions 列挙、定義 payload 組み立て、参照フィールド抽出、insight probe | prep-pulse-repointer (全モード), consumer_probe.py |
+| [consumer_probe.py](consumer_probe.py) | 旧 output PDS ごとの consumer 数 (downstream WB / Pulse 定義 / follower 付き定義) を read-only で実測し、repoint 工程の要否推奨 (`repoint` / `cleanup_only` / `none`) を返す step 0b 用 CLI | prep-migrate step 0b (main agent が実行、Stop 1 の提示材料) |
 
 ## import の仕方
 
