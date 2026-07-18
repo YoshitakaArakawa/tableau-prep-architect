@@ -6,6 +6,8 @@ old PDS luid <-> manifest original.outputs[].luid -> source_original_output_name
 -> the decomposed flow's new output PDS (same join key as prep-workbook-repointer).
 Falls back to name matching when the manifest's old-output luid is null, marked
 `match: "name"`. Old PDS with no mapping land in `unmapped_old_pds`.
+Canonical join-model spec: references/publish-manifest-format.md section
+"repoint join model" (shared with build_repoint_plan.py — keep in sync).
 
 Emits pulse-repoint-design.json (machine input for repoint/verify) and
 pulse-repoint-runbook.md (human) in one pass so the two never diverge.

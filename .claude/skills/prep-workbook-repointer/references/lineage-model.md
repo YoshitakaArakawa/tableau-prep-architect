@@ -36,20 +36,11 @@ note: 手順そのものは SKILL.md、出力フォーマットは repoint-forma
 
 ## 右辺: 旧→新 PDS の join キー
 
-新 PDS への対応は publish-manifest ([../../../../references/publish-manifest-format.md](../../../../references/publish-manifest-format.md)) から引く。
-manifest の `decomposed_flows[].source_original_output_name` が **旧 output PDS 名 → 分解後フロー**
-の 1:1 リンク (直感と逆の対応も機械確定される)。join の連鎖:
-
-1. inventory の旧 PDS `luid` を manifest の `original.outputs[].luid` と照合 → 旧 output `name` を得る
-2. 同 manifest の `decomposed_flows[]` で `source_original_output_name == 旧 output name` を探す
-   → その `outputs[0]` が **新 PDS** (name / luid)
-
-**主キーは luid**。ただし manifest の `original.outputs[].luid` が null (resolve-luids 未実行) の場合は
-**PDS 名での fallback join** に切り替え、その旨を warning に立てる。luid 一致が取れないまま name で
-救済したペアは design.json の `match: "name"` で明示する (人間が対応の妥当性を確認できるように)。
-
-manifest に対応が無い旧 PDS (WB から参照されているが `source_original_output_name` で拾えない) は
-`unmapped_old_pds` に落とす。移行対象外か、manifest の渡し漏れ / resolve-luids 未実行のサイン。
+新 PDS への対応は publish-manifest から引く。join の連鎖・luid 主キー・name fallback
+(`match: "name"`)・`unmapped_old_pds` の正典は
+[publish-manifest-format.md §repoint join model](../../../../references/publish-manifest-format.md)
+(prep-pulse-repointer と共通)。manifest の `decomposed_flows[].source_original_output_name` が
+**旧 output PDS 名 → 分解後フロー** の 1:1 リンクであり、直感と逆の対応も機械確定される。
 
 ## 絞り込みをしない (対象 WB)
 

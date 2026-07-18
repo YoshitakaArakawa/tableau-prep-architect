@@ -1,6 +1,6 @@
 ---
 name: prep-pds-backfiller
-description: 分解後の incremental accumulator PDS に、旧 output PDS の累積履歴を hyper-level surgery で一度だけ seed する (backfill) Skill。deployed flow から accumulator を解決し、列整合検証 → schedule interlock → snapshot 退避 → dry-run → sandbox preview → 明示承認後の本番 Overwrite → 受け入れ incremental 1 サイクル → schedule 再開 を段階実行する。seam (baseline より前の履歴のみ挿入) と replace (sentinel を捨てて全ロード) の 2 モードを持つ。「backfill して」「旧 PDS の履歴を新 PDS に移して」「履歴を seed して」と言われたとき、incremental フロー分解後に過去履歴が欠けているときに起動。値比較・parity 判定は持たない (prep-output-comparator に委譲)。
+description: 分解後の incremental accumulator PDS に、旧 output PDS の累積履歴を hyper-level surgery で一度だけ seed する (backfill) Skill。deployed flow から accumulator を解決し、列整合検証 → schedule interlock → snapshot 退避 → dry-run → sandbox preview → 明示承認後の本番 Overwrite → 受け入れ incremental 1 サイクル → schedule 再開 を段階実行する。seam (baseline より前の履歴のみ挿入) と replace (sentinel を捨てて全ロード) の 2 モードを持つ。「backfill して」「旧 PDS の履歴を新 PDS に移して」「履歴を seed して」と言われたとき、incremental フロー分解後に過去履歴が欠けているときに起動。値比較・parity 判定は持たない (prep-output-comparator に委譲)。移行セッション冒頭の intake・goal ゲート・起動順序は references/migration-workflow.md が正典（本 Skill 単体で移行セッションを始めない）。
 ---
 
 # prep-pds-backfiller

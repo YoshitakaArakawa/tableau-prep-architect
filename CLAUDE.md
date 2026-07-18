@@ -12,7 +12,7 @@
 
 | Skill | 役割 | 副作用 |
 |---|---|---|
-| [prep-extractor](.claude/skills/prep-extractor/SKILL.md) | Phase A flow→flow-summary / Phase B Cloud 階層+Input 分類+PDS LUID→deploy-context (fork) | ローカル / Cloud 読み取りのみ |
+| [prep-extractor](.claude/skills/prep-extractor/SKILL.md) | Phase A flow→flow-summary / Phase B Cloud 階層+Input 分類+PDS LUID→deploy-context / Phase C flow 依存マップ (複数フロー時) (fork) | ローカル / Cloud 読み取りのみ |
 | [prep-architect](.claude/skills/prep-architect/SKILL.md) | analyze (業務解釈・レイヤ推定) + decompose (分解設計、Stop 2 でユーザー確認) (fork) | ローカル |
 | [prep-builder](.claude/skills/prep-builder/SKILL.md) | 設計案から .tfl 群を組み立て (fork で元 .tfl JSON を隔離) | ローカル |
 | [prep-deployer](.claude/skills/prep-deployer/SKILL.md) | preflight / publish / run。合意のみで一気通貫、失敗は autonomous-recovery で自律ループ | サーバー書込 |
@@ -40,12 +40,12 @@
 
 | 場所 | 入る対象 |
 |---|---|
-| repo 直下 `scripts/` | **2 つ以上の Skill が import / 呼び出す** 共通モジュールまたは orchestrator (例: `tableau_auth.py`, `flow_io.py`, `publish_manifest.py`, `run_layer.py`) |
+| repo 直下 `scripts/` | **2 つ以上の Skill が import / 呼び出す** 共通モジュール (例: `tableau_auth.py`, `flow_io.py`, `publish_manifest.py`)、**main agent が migration-workflow の手順として直接実行する orchestrator** (例: `consumer_probe.py`, `run_layer.py`)、**セッション生成スクリプトが import する helper** (例: `build_helpers.py`) |
 | `.claude/skills/<skill>/scripts/` | **その Skill 専用、外から呼ばれない** (例: prep-extractor の `inspect_actions.py`、prep-deployer の `publish_flow.py`) |
 | repo 直下 `references/` | **2 つ以上の Skill が参照する共通規約・スキーマ・ポリシー** (例: `input-policy.md`, `naming-conventions.md`, `tfl-json-schema.md`, `project-hierarchy.md`) |
 | `.claude/skills/<skill>/references/` | **その Skill 専用のレシピ・フォーマット仕様** (例: `flow-summary-format.md`, `build-recipe.md`, `preflight-recipe.md`) |
 
-判断基準: **2 つ以上で使うなら repo 直下、単一 Skill 内で完結するなら Skill 配下**。Skill 配下のファイルを別 Skill も使いたくなったら repo 直下に **昇格** する (ファイル移動 + 参照箇所更新、転送 stub は置かない)。逆向き (repo 直下 → Skill 配下) は基本ない。
+判断基準: **2 つ以上で使うなら repo 直下、単一 Skill 内で完結するなら Skill 配下**。Skill 配下のファイルを別 Skill も使いたくなったら repo 直下に **昇格** する (ファイル移動 + 参照箇所更新、転送 stub は置かない)。逆向き (repo 直下 → Skill 配下) は基本ない。例外: repo 直下の orchestrator が Skill 配下のスクリプトを subprocess で呼ぶことは許容する (例: `run_layer.py` → prep-deployer の `run_flow.py`)。
 
 ## 認証情報の運用
 
@@ -56,7 +56,7 @@ REST 認証は OAuth 2.0 (Authorization Code + PKCE) のブラウザサインイ
 OpenAI Codex ユーザー向けの入口を別途持つ。Skill の正典は `.claude/skills/` のままで、Codex 向けは薄い wrapper + 読み替え方式:
 
 - [AGENTS.md](AGENTS.md) — Codex エントリポイント。この CLAUDE.md と同内容の規範 + Claude Code 固有記法 (`context: fork` / `model` / `${CLAUDE_SKILL_DIR}` 等) の読み替え表を持つ
-- `.agents/skills/<name>/SKILL.md` — 12 個の thin wrapper。正典 SKILL.md へのリンクと実行モード指示のみ (`scripts/sync_agents_skills.py` で生成)
+- `.agents/skills/<name>/SKILL.md` — 11 個の thin wrapper。正典 SKILL.md へのリンクと実行モード指示のみ (`scripts/sync_agents_skills.py` で生成)
 - `.codex/` — trust ゲート・MCP テンプレート・サブエージェント定義 (flow-worker / flow-worker-lite)。trusted プロジェクトでのみ有効
 
 この CLAUDE.md (起動規則・Skill 構成・work/ 規約・repo 構造・認証) や Skill の `description` を変更したら、AGENTS.md と wrapper の同期を取り、`python scripts/sync_agents_skills.py --check` (exit 0 = 同期済み) で検証する。

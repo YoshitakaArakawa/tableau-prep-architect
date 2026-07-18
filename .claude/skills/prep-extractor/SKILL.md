@@ -105,7 +105,7 @@ Tableau Server/Cloud 上の **publish 先プロジェクト階層** を REST API
 
 内部は 3 ステップ (1-pass target_path scan → Input dispatch + 親プロジェクト集合の抽出 → 必要なら `--also-scan` 再 scan + dispatch 再実行)。**手順の CLI・入力の扱い・エラーハンドリング・unknown 検出時の挙動 (exit 2 = session 中断 / direct_db・extract は中断せず provisioning 経路) ・URL ID の LUID 逆引き不可問題は [references/deploy-context-procedure.md](references/deploy-context-procedure.md) を Read で取得** (実行前に必読)。
 
-**preflight 後の再実行 (0c')**: goal ≥ ④ (Cloud publish) では初回 Phase B の時点で stg/int/marts プロジェクトが未作成 (presence=no) なので layer LUID が空。prep-deployer preflight が 3 レイヤを作成した後に **Phase B をもう一度実行** して `deploy-context.md` の layer 行に LUID を埋め、その更新版を入力に decompose の `gen_plan_skeleton.py` が plan.json の `flow_projects` / `ds_projects` を充填する。goal ②/③ (ローカル完結) では preflight も 0c' も走らせず、plan.json の layer LUID は TODO placeholder のまま許容する。
+**preflight 後の再実行 (migration-workflow step 4)**: goal ≥ ④ (Cloud publish) では初回 Phase B の時点で stg/int/marts プロジェクトが未作成 (presence=no) なので layer LUID が空。prep-deployer preflight が 3 レイヤを作成した後に **Phase B をもう一度実行** して `deploy-context.md` の layer 行に LUID を埋め、その更新版を入力に decompose の `gen_plan_skeleton.py` が plan.json の `flow_projects` / `ds_projects` を充填する。goal ②/③ (ローカル完結) では preflight も Phase B 再実行も走らせず、plan.json の layer LUID は TODO placeholder のまま許容する。
 
 メイン会話への戻り値の末尾に **`## Timing` ブロック** を必ず含める ([skill-timing-contract.md](../../../references/skill-timing-contract.md))。
 

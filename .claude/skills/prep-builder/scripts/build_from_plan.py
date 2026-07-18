@@ -340,7 +340,8 @@ def build_tfl(entry: dict, resolver: StepResolver, plan: dict,
 def find_placeholder_projects(plan: dict) -> list[str]:
     """Return group.layer keys whose path/luid are still gen_plan_skeleton's
     TODO placeholders. Placeholders present == the plan predates
-    preflight + Phase B re-run (0c'), so none of its baked LUIDs are real."""
+    preflight + Phase B re-run (migration-workflow step 4), so none of its
+    baked LUIDs are real."""
     found = []
     for grp in ("flow_projects", "ds_projects"):
         for layer, ref in (plan.get(grp) or {}).items():
@@ -362,7 +363,8 @@ def main() -> int:
                   f"LUIDs ({', '.join(placeholders)}) — a --manifest build is "
                   "publish-bound and would bake unpublishable Outputs.\n"
                   "  Fix: run prep-deployer preflight, re-run prep-extractor "
-                  "Phase B (0c'), then re-run gen_plan_skeleton or copy the "
+                  "Phase B (migration-workflow step 4), then re-run "
+                  "gen_plan_skeleton or copy the "
                   "layer LUIDs into the plan's flow_projects/ds_projects.\n"
                   "  Or: drop --manifest for a local-only (goal 3) build.",
                   file=sys.stderr)

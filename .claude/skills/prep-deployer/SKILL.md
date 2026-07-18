@@ -28,7 +28,7 @@ build フェーズは別 Skill ([prep-builder](../prep-builder/SKILL.md))。publ
 
 アルゴリズム・中断時の挙動は [references/preflight-recipe.md](references/preflight-recipe.md) を参照。スクリプトは `create_project.py` (1 セグメント) と `create_projects.py` (dbt 3 レイヤ一括)、いずれも非対話で動く。
 
-**preflight 完了後、caller は prep-extractor Phase B を再実行 (0c') して** `deploy-context.md` の layer 行に作成済みプロジェクトの LUID を埋めてから publish / 後段の decompose へ進む (初回 Phase B は layer 未作成で LUID が空のため)。preflight スクリプトは deploy-context.md への書き戻しをしない — Phase B 再実行が正 ([references/preflight-recipe.md](references/preflight-recipe.md))。
+**preflight 完了後、caller は prep-extractor Phase B を再実行 (migration-workflow step 4) して** `deploy-context.md` の layer 行に作成済みプロジェクトの LUID を埋めてから publish / 後段の decompose へ進む (初回 Phase B は layer 未作成で LUID が空のため)。preflight スクリプトは deploy-context.md への書き戻しをしない — Phase B 再実行が正 ([references/preflight-recipe.md](references/preflight-recipe.md))。
 
 ### Publish
 
