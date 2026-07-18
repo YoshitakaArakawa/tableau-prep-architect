@@ -1,6 +1,6 @@
 ---
 name: prep-migration-planner
-description: 複数フロー移行または横断工程 (スケジュール設計 / Workbook 参照置換 / PDS backfill) を含む Prep 分解プロジェクトで、scope・移行順・人間作業キュー・進捗を 1 枚に集約する移行計画書 (migration-plan.md + migration-plan.json) を生成し、工程の進行に合わせて更新する Skill。prep-extractor Phase C の後 (step 0b) に骨を作って Stop 1 でユーザー承認を取り、以降は各工程完了時に main agent が status と決定を埋めていく progressive-fill 台帳で、セッション横断の resume state も兼ねる。ユーザーが「移行計画を作って」「計画書を出して」「移行の段取りを整理して」と言ったとき、または対象フローが複数・横断工程 (Q2b: schedule / repoint / backfill) を含むときに起動する。フロー内設計 (命名 / レイヤ / Input policy) には踏み込まない (それは prep-architect の decomposition-plan が正)。Cloud 副作用なし・ローカルのみ。
+description: 複数フロー移行または横断工程 (スケジュール設計 / Workbook 参照置換 / PDS backfill) を含む Prep 分解プロジェクトで、scope・移行順・人間作業キュー・進捗を 1 枚に集約する移行計画書 (migration-plan.md + migration-plan.json) を生成し、工程の進行に合わせて更新する Skill。prep-extractor Phase C の後 (migration-workflow step 3) に骨を作って Stop 1 でユーザー承認を取り、以降は各工程完了時に main agent が status と決定を埋めていく progressive-fill 台帳で、セッション横断の resume state も兼ねる。ユーザーが「移行計画を作って」「計画書を出して」「移行の段取りを整理して」と言ったとき、または対象フローが複数・横断工程 (Q2b: schedule / repoint / backfill) を含むときに起動する。フロー内設計 (命名 / レイヤ / Input policy) には踏み込まない (それは prep-architect の decomposition-plan が正)。Cloud 副作用なし・ローカルのみ。
 ---
 
 # prep-migration-planner
@@ -11,7 +11,7 @@ end-to-end 移行 (extract → decompose → build → publish → compare → s
 
 ## いつ呼ばれるか
 
-- **位置**: `step 0b` (`prep-extractor` Phase C の直後、`prep-architect` の analyze/decompose より前)。
+- **位置**: [migration-workflow](../../../references/migration-workflow.md) の step 3 (`prep-extractor` Phase C の直後、`prep-architect` の analyze/decompose より前)。
 - **発動条件**: 忘れ防止の価値は**横断工程 (Q2b)** に、順序管理の価値は**フロー数**に依存する。この 2 軸で切る:
 
 | | Q2b なし (横断工程なし) | Q2b あり (schedule・repoint・backfill のいずれか) |
@@ -31,7 +31,7 @@ end-to-end 移行 (extract → decompose → build → publish → compare → s
 
 | 局面 | 実行主体 | 動作 | 埋まる / 更新されるセクション |
 |---|---|---|---|
-| **init** (step 0b) | 本 Skill | facts + deploy-context + intake から骨を生成 → Stop 1 提示 | scope / migration_order / backfill_candidates / human_queue 骨 / pointers |
+| **init** (workflow step 3) | 本 Skill | facts + deploy-context + intake から骨を生成 → Stop 1 提示 | scope / migration_order / backfill_candidates / human_queue 骨 / pointers |
 | **update** (decompose〜横断工程) | main agent (courier) | 各工程完了で status 更新、横断工程直前に決定を埋め、同値を下流 Skill の既存引数に渡す | matrix.rows (build 開始で生成) / trigger_policy / old_schedule_notes / backfill mode / repoint 対応 / 各 status |
 | **resume** (新セッション冒頭) | main agent | `migration-plan.json` を読み、status を manifest 群と突合して再導出、次工程を決定 | status (再導出) / pointers.manifests 追記 |
 

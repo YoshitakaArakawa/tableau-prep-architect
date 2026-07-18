@@ -2,17 +2,16 @@
 
 ## Overview
 
-このリポジトリは Tableau Prep の長大化したフロー (.tfl/.tflx) を、dbt 流のレイヤ規律（staging / intermediate / marts）で **分析・分解設計・再構築** するための Claude Code エージェント環境。個々の Skill 単体ではなく、**移行のオーケストレーション (prep-migrate の手順 + 起動規則 + work/ 規律 + 共通 scripts/references + Codex 入口) を一体にした作業環境**として、リポごと clone して中で移行セッションを回すことを想定する (中身を参考にするだけでも可)。**dbt 自体は使わない**——コンセプトのみ転用。詳細な思想・利用条件・スコープ外（push-down 提案など）は [README.md](README.md#設計思想--使いどころ) 参照。
+このリポジトリは Tableau Prep の長大化したフロー (.tfl/.tflx) を、dbt 流のレイヤ規律（staging / intermediate / marts）で **分析・分解設計・再構築** するための Claude Code エージェント環境。個々の Skill 単体ではなく、**移行のオーケストレーション (migration-workflow の手順 + 起動規則 + work/ 規律 + 共通 scripts/references + Codex 入口) を一体にした作業環境**として、リポごと clone して中で移行セッションを回すことを想定する (中身を参考にするだけでも可)。**dbt 自体は使わない**——コンセプトのみ転用。詳細な思想・利用条件・スコープ外（push-down 提案など）は [README.md](README.md#設計思想--使いどころ) 参照。
 
 ## 起動規則 (最重要)
 
-ユーザーが既存 Prep フローの **分析 / 分解設計 / 移行 / Cloud publish / E2E 比較 / スケジュール設計 / Workbook repoint / Pulse repoint / backfill** を依頼したら、他の作業に入る前に **必ず [prep-migrate](.claude/skills/prep-migrate/SKILL.md) skill を起動**し、その Workflow / Session intake 手順に従う。移行タスクの実行手順 (workflow 図・intake Q1-Q5・Stop 1/2・deploy-context ライフサイクル・goal ゲート・targeted fix ループ・courier 責務) は prep-migrate が正典で、CLAUDE.md には持たない。
+ユーザーが既存 Prep フローの **分析 / 分解設計 / 移行 / Cloud publish / E2E 比較 / スケジュール設計 / Workbook repoint / Pulse repoint / backfill** を依頼したら、他の作業に入る前に **必ず [references/migration-workflow.md](references/migration-workflow.md) を読み**、その step 0 (Session intake) から実行する。移行タスクの実行手順 (workflow 表・intake Q1-Q5・Stop 1/2・deploy-context ライフサイクル・goal ゲート・targeted fix ループ) は migration-workflow.md が正典で、CLAUDE.md には持たない。
 
 ## Skill 構成
 
 | Skill | 役割 | 副作用 |
 |---|---|---|
-| [prep-migrate](.claude/skills/prep-migrate/SKILL.md) | 移行セッションの entry-point 手順書 (intake + workflow + Stop 運用、main agent 向け・fork なし) | なし (手順のみ) |
 | [prep-extractor](.claude/skills/prep-extractor/SKILL.md) | Phase A flow→flow-summary / Phase B Cloud 階層+Input 分類+PDS LUID→deploy-context (fork) | ローカル / Cloud 読み取りのみ |
 | [prep-architect](.claude/skills/prep-architect/SKILL.md) | analyze (業務解釈・レイヤ推定) + decompose (分解設計、Stop 2 でユーザー確認) (fork) | ローカル |
 | [prep-builder](.claude/skills/prep-builder/SKILL.md) | 設計案から .tfl 群を組み立て (fork で元 .tfl JSON を隔離) | ローカル |
@@ -25,11 +24,11 @@
 | [prep-pds-backfiller](.claude/skills/prep-pds-backfiller/SKILL.md) | incremental accumulator に旧 output PDS 履歴を seed。段取りゲート付き | サーバー書込 (本番 PDS Overwrite) |
 | [prep-migration-planner](.claude/skills/prep-migration-planner/SKILL.md) | 複数フロー/横断工程の scope・移行順・人間作業・進捗を migration-plan に集約 (fork なし) | ローカル |
 
-役割対称性: 読み取り = prep-extractor + prep-output-comparator + prep-schedule-designer / 書き込み = prep-deployer (+ augmenter, backfiller, workbook-repointer / pulse-repointer の repoint モード) / オーケストレーション = prep-migrate (手順) + prep-migration-planner (セッション横断台帳)。
+役割対称性: 読み取り = prep-extractor + prep-output-comparator + prep-schedule-designer / 書き込み = prep-deployer (+ augmenter, backfiller, workbook-repointer / pulse-repointer の repoint モード) / オーケストレーション = [references/migration-workflow.md](references/migration-workflow.md) (手順) + prep-migration-planner (セッション横断台帳)。
 
 ## work/ ディレクトリ規約
 
-このリポジトリ内で動くセッションの全成果物 (Skill 出力 / .tfl / build スクリプト) は `work/<yyyymmdd>_<tag>/` に集約する (`<tag>` は Session intake の [Q3](.claude/skills/prep-migrate/SKILL.md#session-intake-step-0))。「スクラッチ (使い捨ての遊び場)」ではなく公式の置き場。直下は **入力 (.tfl / flow.json) + 4 サブフォルダ (`reports/` `flows/` `scripts/` `scratch/`) で固定** — ファイルの「役割」で分離し、Skill が増えても直下を膨張させない。各サブフォルダの責務 (入れるもの / 入れないもの)・昇格ルール・実行時間の事後計測 tip は [work/README.md](work/README.md) を参照。git 追跡は `work/README.md` のみ。
+このリポジトリ内で動くセッションの全成果物 (Skill 出力 / .tfl / build スクリプト) は `work/<yyyymmdd>_<tag>/` に集約する (`<tag>` は Session intake の [Q3](references/migration-workflow.md#step-0-session-intake))。「スクラッチ (使い捨ての遊び場)」ではなく公式の置き場。直下は **入力 (.tfl / flow.json) + 4 サブフォルダ (`reports/` `flows/` `scripts/` `scratch/`) で固定** — ファイルの「役割」で分離し、Skill が増えても直下を膨張させない。各サブフォルダの責務 (入れるもの / 入れないもの)・昇格ルール・実行時間の事後計測 tip は [work/README.md](work/README.md) を参照。git 追跡は `work/README.md` のみ。
 
 移行セッションはこのリポを clone した中で回すのが既定で、全成果物は上記 `work/<yyyymmdd>_<tag>/` 配下に隔離する (リポ外に出さない)。
 

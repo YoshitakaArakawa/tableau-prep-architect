@@ -126,7 +126,7 @@ publish 失敗 / run 失敗時も **AI は自動ロールバックしない**。
 
 ## レイヤ間順序の扱い
 
-prep-migrate の Workflow が定める `stg → intermediate → marts` 順序は **承認ゲートではなく依存関係**。ループも以下のように回す:
+[migration-workflow](../../../../references/migration-workflow.md) が定める `stg → intermediate → marts` 順序は **承認ゲートではなく依存関係**。ループも以下のように回す:
 
 ```
 for layer in [stg, intermediate, marts]:

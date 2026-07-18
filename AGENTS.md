@@ -4,13 +4,11 @@
 
 ## リポ概要
 
-このリポジトリは Tableau Prep の長大化したフロー (.tfl/.tflx) を、dbt 流のレイヤ規律 (staging / intermediate / marts) で **分析・分解設計・再構築** するための Claude Code / Codex エージェント環境です。個々の Skill 単体ではなく、**移行のオーケストレーション (prep-migrate の手順 + 起動規則 + work/ 規律 + 共通 scripts/references + Codex 入口) を一体にした作業環境**として、リポごと clone して中で移行セッションを回すことを想定します (中身を参考にするだけでも可)。**dbt 自体は使いません**——コンセプトのみ転用します。設計思想・利用条件・スコープ外 (push-down 提案など) の詳細は [README.md](README.md#設計思想--使いどころ) を参照してください。
+このリポジトリは Tableau Prep の長大化したフロー (.tfl/.tflx) を、dbt 流のレイヤ規律 (staging / intermediate / marts) で **分析・分解設計・再構築** するための Claude Code / Codex エージェント環境です。個々の Skill 単体ではなく、**移行のオーケストレーション (migration-workflow の手順 + 起動規則 + work/ 規律 + 共通 scripts/references + Codex 入口) を一体にした作業環境**として、リポごと clone して中で移行セッションを回すことを想定します (中身を参考にするだけでも可)。**dbt 自体は使いません**——コンセプトのみ転用します。設計思想・利用条件・スコープ外 (push-down 提案など) の詳細は [README.md](README.md#設計思想--使いどころ) を参照してください。
 
 ## 起動規則 (最重要)
 
-ユーザーが既存 Prep フローの **分析 / 分解設計 / 移行 / Cloud publish / E2E 比較 / スケジュール設計 / Workbook repoint / Pulse repoint / backfill** を依頼したら、他の作業に入る前に **必ず [prep-migrate](.claude/skills/prep-migrate/SKILL.md) の SKILL.md を読み**、その Workflow / Session intake 手順に従ってください。移行タスクの実行手順 (workflow 図・intake Q1-Q5・Stop 1/2・deploy-context ライフサイクル・goal ゲート・targeted fix ループ・courier 責務) は prep-migrate が正典で、本ファイルには持ちません。
-
-`$prep-migrate` のように明示起動しても、自然言語依頼で暗黙起動しても構いません。いずれの経路でも、実体の手順は正典 SKILL.md を読んで実行します。
+ユーザーが既存 Prep フローの **分析 / 分解設計 / 移行 / Cloud publish / E2E 比較 / スケジュール設計 / Workbook repoint / Pulse repoint / backfill** を依頼したら、他の作業に入る前に **必ず [references/migration-workflow.md](references/migration-workflow.md) を読み**、その step 0 (Session intake) から実行してください。移行タスクの実行手順 (workflow 表・intake Q1-Q5・Stop 1/2・deploy-context ライフサイクル・goal ゲート・targeted fix ループ) は migration-workflow.md が正典で、本ファイルには持ちません。
 
 ## Skill 一覧
 
@@ -18,7 +16,6 @@
 
 | Skill | 役割 | 正典パス | 実行モード |
 |---|---|---|---|
-| prep-migrate | 移行セッションの entry-point 手順書 (intake + workflow + Stop 運用) | [.claude/skills/prep-migrate/SKILL.md](.claude/skills/prep-migrate/SKILL.md) | 主会話 |
 | prep-extractor | Phase A flow→flow-summary / Phase B Cloud 階層+Input 分類+PDS LUID→deploy-context | [.claude/skills/prep-extractor/SKILL.md](.claude/skills/prep-extractor/SKILL.md) | サブエージェント委譲 (flow-worker-lite) |
 | prep-architect | analyze (業務解釈・レイヤ推定) + decompose (分解設計、Stop 2 でユーザー確認) | [.claude/skills/prep-architect/SKILL.md](.claude/skills/prep-architect/SKILL.md) | サブエージェント委譲 (flow-worker) |
 | prep-builder | 設計案から .tfl 群を組み立て (元 .tfl JSON を隔離) | [.claude/skills/prep-builder/SKILL.md](.claude/skills/prep-builder/SKILL.md) | サブエージェント委譲 (flow-worker) |
@@ -31,9 +28,9 @@
 | prep-pds-backfiller | incremental accumulator に旧 output PDS 履歴を seed。段取りゲート付き | [.claude/skills/prep-pds-backfiller/SKILL.md](.claude/skills/prep-pds-backfiller/SKILL.md) | 主会話 |
 | prep-migration-planner | 複数フロー/横断工程の scope・移行順・人間作業・進捗を migration-plan に集約 | [.claude/skills/prep-migration-planner/SKILL.md](.claude/skills/prep-migration-planner/SKILL.md) | 主会話 |
 
-役割対称性: 読み取り = prep-extractor + prep-output-comparator + prep-schedule-designer / 書き込み = prep-deployer (+ augmenter, backfiller, workbook-repointer / pulse-repointer の repoint モード) / オーケストレーション = prep-migrate (手順) + prep-migration-planner (セッション横断台帳)。
+役割対称性: 読み取り = prep-extractor + prep-output-comparator + prep-schedule-designer / 書き込み = prep-deployer (+ augmenter, backfiller, workbook-repointer / pulse-repointer の repoint モード) / オーケストレーション = [references/migration-workflow.md](references/migration-workflow.md) (手順) + prep-migration-planner (セッション横断台帳)。
 
-Codex 向けの入口は `.agents/skills/<name>/SKILL.md` (12 個の薄い wrapper) です。wrapper は正典 SKILL.md へのリンクと実行モードの指示だけを持ち、実体は上表の正典パスを読んで実行します。
+Codex 向けの入口は `.agents/skills/<name>/SKILL.md` (11 個の薄い wrapper) です。wrapper は正典 SKILL.md へのリンクと実行モードの指示だけを持ち、実体は上表の正典パスを読んで実行します。
 
 ## Claude Code 記法の読み替え表
 
@@ -60,7 +57,7 @@ Codex 向けの入口は `.agents/skills/<name>/SKILL.md` (12 個の薄い wrapp
 
 **Codex への写像**: fork 系 Skill は、`.codex/agents/` のサブエージェント (flow-worker / flow-worker-lite) に委譲して実行します。サブエージェント機能が使えない場合は組み込みのサブエージェント、それも無ければインライン実行にフォールバックして構いません。**ただしどの経路でも (b) 入力明示契約と (c) 出力契約 (ファイル出力・主会話へ中間 JSON を流さない・返答は要約 + Timing ブロック) は必ず維持します**。インライン実行はコンテキスト隔離 (a) の保証が弱まるだけで、契約自体は免除されません。
 
-fork しない 5 Skill (prep-migrate / prep-migration-planner / prep-deployer / prep-pds-augmenter / prep-pds-backfiller) は、**ユーザー承認ゲート・失敗観測を主会話で扱う**ための意図的設計です。これらはサブエージェントに委譲せず、主会話で実行してください。
+fork しない 4 Skill (prep-migration-planner / prep-deployer / prep-pds-augmenter / prep-pds-backfiller) は、**ユーザー承認ゲート・失敗観測を主会話で扱う**ための意図的設計です。これらはサブエージェントに委譲せず、主会話で実行してください。
 
 ## work/ ディレクトリ規約
 

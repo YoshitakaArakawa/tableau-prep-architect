@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the skeleton migration-plan.json for step 0b.
+"""Generate the skeleton migration-plan.json for migration-workflow step 3.
 
 Fills the init-mandatory sections (scope / migration_order / backfill_candidates
 / human_queue skeleton / pointers) from mechanical inputs + intake values, and
@@ -45,7 +45,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from flow_io import get_incremental_config  # noqa: E402
 
-# Q2a の goal 深度 (prep-migrate Session intake) を表示ラベルに対応させる
+# Q2a の goal 深度 (migration-workflow session intake) を表示ラベルに対応させる
 GOAL_LABELS = {
     1: "① 分析のみ",
     2: "② 分解設計まで",

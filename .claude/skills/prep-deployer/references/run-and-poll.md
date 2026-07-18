@@ -100,7 +100,7 @@ python run_flow.py --flow-id <luid> --no-wait
 python get_job_status.py --job-id <jobId>   # 後で個別に確認
 ```
 
-承認は session intake (prep-migrate の step 0) で済んでいる前提 ([autonomous-recovery.md §実行ポリシー](autonomous-recovery.md))。
+承認は session intake (migration-workflow step 0) で済んでいる前提 ([autonomous-recovery.md §実行ポリシー](autonomous-recovery.md))。
 
 ## Polling 設計
 

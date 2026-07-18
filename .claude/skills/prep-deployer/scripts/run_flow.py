@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Trigger a published Tableau Prep flow run on Server/Cloud.
 
-Runs non-interactively. Approval is taken at session intake (prep-migrate step 0);
+Runs non-interactively. Approval is taken at session intake (migration-workflow step 0);
 see references/autonomous-recovery.md.
 
 Waits for completion by default (--no-wait to fire-and-forget). On completion,

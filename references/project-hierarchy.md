@@ -130,7 +130,7 @@ WARNING: creating top-level project '<name>' — org governance implications. Au
   LUID: ...
 ```
 
-session intake (prep-migrate step 0 Q4) で top-level を含む target path が指示されていれば、処理は止めずに WARNING を残して進む。後段で governance 上の事後監査ができるよう stderr に出すのが目的 ([autonomous-recovery.md §実行ポリシー](../.claude/skills/prep-deployer/references/autonomous-recovery.md))。
+session intake ([migration-workflow](migration-workflow.md) step 0 Q4) で top-level を含む target path が指示されていれば、処理は止めずに WARNING を残して進む。後段で governance 上の事後監査ができるよう stderr に出すのが目的 ([autonomous-recovery.md §実行ポリシー](../.claude/skills/prep-deployer/references/autonomous-recovery.md))。
 
 ## ambiguity（同名複数）
 

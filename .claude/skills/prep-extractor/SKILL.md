@@ -1,6 +1,6 @@
 ---
 name: prep-extractor
-description: Tableau Prep の .tfl / .tflx / flow.json およびサーバー上のプロジェクト階層を読み、後段が直接 JSON / REST を見なくて済むコンパクトなサマリに再構成する Skill。Phase A = flow extraction（flow-summary.md）、Phase B = cloud context extraction（deploy-context.md + input-dispatch-mech.json）、Phase C = flow dependency mapping（flow-dependencies.md、複数フロー移行の計画時のみ）の 3 フェーズを持つ。大きな Prep フロー（数十〜数百ノード）を解析・分解する前、または Tableau Cloud に publish する前に必ず実行する。ユーザーが「フローを extract して」「flow-summary を作って」「publish 先のプロジェクトを確認して」「Input を分類して」「フロー間の依存を調べて」「移行順を決めて」と言ったとき、サーバー上のフローを DL したいときに起動（list_flows.py / download_flow.py）。移行セッション冒頭の intake・goal ゲート・起動順序は prep-migrate が正典（本 Skill 単体で移行セッションを始めない）。
+description: Tableau Prep の .tfl / .tflx / flow.json およびサーバー上のプロジェクト階層を読み、後段が直接 JSON / REST を見なくて済むコンパクトなサマリに再構成する Skill。Phase A = flow extraction（flow-summary.md）、Phase B = cloud context extraction（deploy-context.md + input-dispatch-mech.json）、Phase C = flow dependency mapping（flow-dependencies.md、複数フロー移行の計画時のみ）の 3 フェーズを持つ。大きな Prep フロー（数十〜数百ノード）を解析・分解する前、または Tableau Cloud に publish する前に必ず実行する。ユーザーが「フローを extract して」「flow-summary を作って」「publish 先のプロジェクトを確認して」「Input を分類して」「フロー間の依存を調べて」「移行順を決めて」と言ったとき、サーバー上のフローを DL したいときに起動（list_flows.py / download_flow.py）。移行セッション冒頭の intake・goal ゲート・起動順序は references/migration-workflow.md が正典（本 Skill 単体で移行セッションを始めない）。
 context: fork
 model: haiku
 allowed-tools: Read Write Bash(python *) Bash(mkdir *) Glob Grep

@@ -5,7 +5,7 @@ description: prep-builder が生成した .tfl 群を Tableau Server/Cloud に p
 
 # prep-deployer
 
-prep-builder が組み立てた .tfl 群を Tableau Server/Cloud に届け、運用副作用 (preflight / publish / run) を扱う Skill。**session intake ([prep-migrate §Session intake](../prep-migrate/SKILL.md#session-intake-step-0)) で goal (Q2a) と target path (Q4) が合意済みの前提で、書き込み操作は承認プロンプトを出さずに自律実行する**。失敗は [autonomous-recovery](references/autonomous-recovery.md) のマッピングで分類し、回復可能なら自動リトライ、回復不能なら escalation。
+prep-builder が組み立てた .tfl 群を Tableau Server/Cloud に届け、運用副作用 (preflight / publish / run) を扱う Skill。**session intake ([migration-workflow §Step 0](../../../references/migration-workflow.md#step-0-session-intake)) で goal (Q2a) と target path (Q4) が合意済みの前提で、書き込み操作は承認プロンプトを出さずに自律実行する**。失敗は [autonomous-recovery](references/autonomous-recovery.md) のマッピングで分類し、回復可能なら自動リトライ、回復不能なら escalation。
 
 本 Skill は `context: fork` を **付けない**。理由は publish / run の失敗を主会話で観測し、recovery ループの最終 escalation を主会話に報告する必要があるため。
 

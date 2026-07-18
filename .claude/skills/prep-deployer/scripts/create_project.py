@@ -7,7 +7,7 @@ the deploy-context.md `pending_segments` list. The caller picks the parent
 and supplies the new project name.
 
 Runs non-interactively. Approval for the whole target path is taken at session
-intake (prep-migrate step 0 Q4); see references/autonomous-recovery.md.
+intake (migration-workflow step 0 Q4); see references/autonomous-recovery.md.
 Top-level creation (no --parent-id / --parent-path) is still allowed but emits
 a WARNING line on stderr for governance visibility.
 
