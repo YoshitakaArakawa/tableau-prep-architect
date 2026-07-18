@@ -65,9 +65,12 @@ runbook / design.json には載せない。
 - **webpage_url** (WB): Desktop で対象 WB を開くための URL。TSC `WorkbookItem.webpage_url` から解決。
   runbook の主役の一つ (もう一つは新 PDS *名*)。
 - **content_url** (新 PDS): TSC `DatasourceItem.content_url` から解決し design.json に残す。
-  現行ワークフロー (Desktop の Replace Data Source は *名前* で選ぶ) では **使わない**。
-  将来の `.twb` XML 手術オプション (`<repository-location>` 書換 → republish) の back-key として
-  持たせておく布石 (SKILL.md §将来拡張)。解決できなくても design は成立する (best-effort)。
+  Desktop の Replace Data Source (名前で選ぶ) では使わないが、**repoint モードの TWB 手術が
+  置換キーとして消費する** ([twb-surgery.md](twb-surgery.md))。解決できなくても design は成立する
+  (best-effort — repoint モードが手術時に LUID から再解決する)。
+
+REST workbook connections が返す `datasource id` は **PDS 本体の LUID ではない** (shadow id)。
+接続の即時チェックは `datasource_name` で行い、LUID 級の裏取りは Metadata API lineage で取る。
 
 ## verify: 反映突合と eventual consistency
 
@@ -92,18 +95,19 @@ overall は全 WB が `reflected` のときだけ `PASS`、それ以外は `INCO
 未反映で `not_reflected` になりうる。したがって verify は:
 
 - **単一スナップショット**を取って報告するだけ (内部リトライループは持たない — fork 内で放置しない)
-- レポートで「未反映は時間をおいて再実行」を案内する
-- **fail を自分では直さない**。数回再実行しても解消しないときだけ、人間が Desktop の
-  Replace Data Source をやり直すか、caller が design を再実行する
+- レポートで「未反映は時間をおいて再実行」を案内する (反映は republish 後数分以内に完了することが
+  多いが保証はない)
+- **fail を自分では直さない**。数回再実行しても解消しないときだけ、差し替え (repoint モードまたは
+  Desktop) をやり直すか、caller が design を再実行する
 
 ## スコープ境界 (やらないこと)
 
 | 関心事 | 担当 |
 |---|---|
-| 接続の実書き換え (`.twb` 編集 / republish) | **人間** (Desktop の Replace Data Source)。本 Skill はしない |
+| 接続の実書き換え | 本 Skill の **repoint モード** (TWB 手術 + republish、[twb-surgery.md](twb-surgery.md)) が既定。fallback = 人間 (Desktop の Replace Data Source) |
 | 列等価性 / 壊れるビュー予告 (field-parity) | prep-output-comparator |
 | 旧 flow スケジュール停止 | prep-schedule-designer |
 | 旧 PDS の残置 / 削除判断 | 人間 (migration の step 判断) |
 | 薄い行数 (baseline-forward) の gating | 持たない (migration 側の関心事) |
 
-本 Skill は **lineage 差し替えの設計 (design) と反映検証 (verify) に専念** する read-only Skill。
+design / verify モードは read-only。サーバー書き込みは repoint モードの WB republish のみ。
