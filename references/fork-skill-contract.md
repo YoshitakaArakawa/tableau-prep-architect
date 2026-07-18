@@ -1,5 +1,5 @@
 ---
-purpose: context:fork で動く後工程 Skill (tableau-pds-comparator / tableau-schedule-designer / tableau-workbook-repointer) が共通で守る呼び出し契約を 1 箇所に集約する。caller 入力の渡し方・戻り値の Timing・失敗時の停止規律・認証失効の扱いの 4 点。多くは read-only だが、tableau-workbook-repointer の repoint モード (WB republish) のようにサーバー書込を持つモードにも同じ契約が適用される
+purpose: context:fork で動く後工程 Skill (tableau-pds-comparator / tableau-prep-schedule-designer / tableau-workbook-repointer) が共通で守る呼び出し契約を 1 箇所に集約する。caller 入力の渡し方・戻り値の Timing・失敗時の停止規律・認証失効の扱いの 4 点。多くは read-only だが、tableau-workbook-repointer の repoint モード (WB republish) のようにサーバー書込を持つモードにも同じ契約が適用される
 note: 全 fork Skill に共通する骨だけを規定する。各 Skill 固有の入力表・固有の「よくある失敗」パターン列挙は各 SKILL.md に残す。書き込み系 (tableau-prep-deployer / tableau-pds-augmenter / tableau-pds-backfiller) は承認・失敗観測を主会話で扱うため fork せず、この契約 (特に §2 Timing) は適用されない — 適用是非は各 SKILL.md が明示する
 ---
 

@@ -1,9 +1,9 @@
 ---
-name: tableau-migration-planner
+name: tableau-prep-migration-planner
 description: 複数フロー移行または横断工程 (スケジュール設計 / Workbook 参照置換 / PDS backfill) を含む Prep 分解プロジェクトで、scope・移行順・人間作業キュー・進捗を 1 枚に集約する移行計画書 (migration-plan.md + migration-plan.json) を生成し、工程の進行に合わせて更新する Skill。tableau-prep-extractor Phase C の後 (migration-workflow step 3) に骨を作って Stop 1 でユーザー承認を取り、以降は各工程完了時に main agent が status と決定を埋めていく progressive-fill 台帳で、セッション横断の resume state も兼ねる。ユーザーが「移行計画を作って」「計画書を出して」「移行の段取りを整理して」と言ったとき、または対象フローが複数・横断工程 (Q2b = schedule / repoint / backfill) を含むときに起動する。フロー内設計 (命名 / レイヤ / Input policy) には踏み込まない (それは tableau-prep-architect の decomposition-plan が正)。Cloud 副作用なし・ローカルのみ。
 ---
 
-# tableau-migration-planner
+# tableau-prep-migration-planner
 
 end-to-end 移行 (extract → decompose → build → publish → compare → schedule → repoint → backfill) を**プロジェクト単位でオーケストレーションする台帳** `migration-plan` (`.json` + `.md`) を生成・更新する Skill。**プロジェクト全体の割り付けと進捗**を扱い、フロー内設計 (命名・レイヤ・Input policy・Output mapping) には踏み込まない — それは `tableau-prep-architect` の `decomposition-plan-<flow>.json` が正 (§役割境界)。設計モデルは [references/orchestration-model.md](references/orchestration-model.md)、計画書のスキーマと md テンプレートは [references/plan-format.md](references/plan-format.md)。
 
@@ -89,7 +89,7 @@ md のパスを案内し、**scope / migration_order / backfill 候補 / human_q
 
 本 Skill は関与しない。main agent が `migration-plan.json` を直接読み書きする。要点 (詳細は [references/orchestration-model.md](references/orchestration-model.md)):
 
-- **courier パターン**: 下流 Skill を計画書 artifact に結合させない。例 (schedule 工程) — main agent が ①ユーザーにトリガ方針を聞く ②`trigger_policy` を埋める ③**同値を `tableau-schedule-designer` の既存 `trigger_policy` 引数に渡す** ④完了後 `human_queue` の `runbook_ref` と matrix status を更新。同型を repoint (`manifest_paths` 集約) / backfill (起動判断リスト) に適用。
+- **courier パターン**: 下流 Skill を計画書 artifact に結合させない。例 (schedule 工程) — main agent が ①ユーザーにトリガ方針を聞く ②`trigger_policy` を埋める ③**同値を `tableau-prep-schedule-designer` の既存 `trigger_policy` 引数に渡す** ④完了後 `human_queue` の `runbook_ref` と matrix status を更新。同型を repoint (`manifest_paths` 集約) / backfill (起動判断リスト) に適用。
 - **status は再導出キャッシュ**: resume 時に manifest 群と突合。正本にしない。
 - **決定台帳 ≠ ファクトキャッシュ**: 決定 (trigger_policy 等) は計画書が正。ファクト (run-type / LUID / 依存エッジ) は下流が `.tfl` 実体・manifest・flow-dependencies.md から毎回再導出する — 計画書からは読ませない。
 

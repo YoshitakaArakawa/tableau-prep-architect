@@ -1,9 +1,9 @@
 ---
-name: tableau-schedule-designer
+name: tableau-prep-schedule-designer
 description: 分解後 Prep フロー群 (int/mart) の定期実行スケジュールを設計し、Cloud UI で Linked Task を作成するための設計資料 (schedule-setup-runbook.md + schedule-design.json) を生成する Skill。run-type (Full/Incremental) は decomposed .tfl の実体スキャンで、依存順は LoadSqlProxy スキャンで機械確定し、facts-last の実行順・トリガ (曜日/時刻)・旧スケジュールの削除対象を 1 枚にまとめる。人間の UI セットアップ後は verify モードで設計とサーバー実測 (tasks/linked) を突合する。移行完了後に「スケジュールを設計して」「Linked Task の設計資料を作って」「定期実行を組みたい」「スケジュール設定を検証して」と言われたときに起動。スケジュールの API 作成・旧スケジュール削除はしない (Linked Task は UI 専用)。Cloud は読み取りのみ。移行セッション冒頭の intake・goal ゲート・起動順序は references/migration-workflow.md が正典（本 Skill 単体で移行セッションを始めない）。
 ---
 
-この skill の正典は [.claude/skills/tableau-schedule-designer/SKILL.md](../../../.claude/skills/tableau-schedule-designer/SKILL.md)。次の手順で実行する:
+この skill の正典は [.claude/skills/tableau-prep-schedule-designer/SKILL.md](../../../.claude/skills/tableau-prep-schedule-designer/SKILL.md)。次の手順で実行する:
 
 1. リポジトリルートの `AGENTS.md` の「Claude Code 記法の読み替え表」を確認する (未読の場合)。
 2. 正典 SKILL.md を読み、その手順に従う。frontmatter の Claude Code 固有フィールドは読み替え表に従って解釈する。

@@ -8,7 +8,7 @@ empty for later progressive fill. See references/plan-format.md for the schema
 and references/orchestration-model.md for the decision-ledger rationale.
 
 Backfill candidates are detected from incremental config (the flow_io canonical
-logic, same as tableau-schedule-designer): a flow whose run_type is "incremental"
+logic, same as tableau-prep-schedule-designer): a flow whose run_type is "incremental"
 is a candidate. Two input paths:
 
   - multi-flow: read map_flow_dependencies.py --json facts (incremental column

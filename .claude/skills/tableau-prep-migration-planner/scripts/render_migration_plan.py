@@ -58,7 +58,7 @@ def render_matrix(matrix: dict) -> list[str]:
 def render_trigger_policy(tp) -> list[str]:
     if not tp:
         return ["(schedule 工程で確定 / crosscut に schedule が無ければ N/A)"]
-    if isinstance(tp, str):  # tableau-schedule-designer の trigger_policy は散文契約
+    if isinstance(tp, str):  # tableau-prep-schedule-designer の trigger_policy は散文契約
         return [tp]
     L = []
     if tp.get("tz"):

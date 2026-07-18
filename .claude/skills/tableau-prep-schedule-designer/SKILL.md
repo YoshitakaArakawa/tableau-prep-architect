@@ -1,12 +1,12 @@
 ---
-name: tableau-schedule-designer
+name: tableau-prep-schedule-designer
 description: 分解後 Prep フロー群 (int/mart) の定期実行スケジュールを設計し、Cloud UI で Linked Task を作成するための設計資料 (schedule-setup-runbook.md + schedule-design.json) を生成する Skill。run-type (Full/Incremental) は decomposed .tfl の実体スキャンで、依存順は LoadSqlProxy スキャンで機械確定し、facts-last の実行順・トリガ (曜日/時刻)・旧スケジュールの削除対象を 1 枚にまとめる。人間の UI セットアップ後は verify モードで設計とサーバー実測 (tasks/linked) を突合する。移行完了後に「スケジュールを設計して」「Linked Task の設計資料を作って」「定期実行を組みたい」「スケジュール設定を検証して」と言われたときに起動。スケジュールの API 作成・旧スケジュール削除はしない (Linked Task は UI 専用)。Cloud は読み取りのみ。移行セッション冒頭の intake・goal ゲート・起動順序は references/migration-workflow.md が正典（本 Skill 単体で移行セッションを始めない）。
 context: fork
 agent: general-purpose
 allowed-tools: Read Write Bash(python *) Glob Grep
 ---
 
-# tableau-schedule-designer
+# tableau-prep-schedule-designer
 
 分解後フロー群のスケジュールを **設計** (design モード) し、人間が Cloud UI で Linked Task を作成した後に **検証** (verify モード) する Skill。**読み取り専用** (Cloud への書き込み副作用なし)。設計規範は [references/scheduling-model.md](references/scheduling-model.md)、出力形式は [references/runbook-format.md](references/runbook-format.md)。
 

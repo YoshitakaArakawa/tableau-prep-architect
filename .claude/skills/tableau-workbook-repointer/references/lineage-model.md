@@ -97,7 +97,7 @@ overall は全 WB が `reflected` のときだけ `PASS`、それ以外は `INCO
 |---|---|
 | 接続の実書き換え | 本 Skill の **repoint モード** (TWB 手術 + republish、[twb-surgery.md](twb-surgery.md)) が既定。fallback = 人間 (Desktop の Replace Data Source) |
 | 列等価性 / 壊れるビュー予告 (field-parity) | tableau-pds-comparator |
-| 旧 flow スケジュール停止 | tableau-schedule-designer |
+| 旧 flow スケジュール停止 | tableau-prep-schedule-designer |
 | 旧 PDS の残置 / 削除判断 | 人間 (migration の step 判断) |
 | 薄い行数 (baseline-forward) の gating | 持たない (migration 側の関心事) |
 

@@ -24,14 +24,14 @@ python scripts/map_flow_dependencies.py --project "<project>" --download-dir <wo
     -o <work>/reports/flow-dependencies.md
 ```
 
-移行計画 (tableau-migration-planner) を作る場合は `--json <work>/reports/flow-dependencies.json` も付けて raw facts (incremental 列込み) を出力する (`init_plan.py` が消費する)。
+移行計画 (tableau-prep-migration-planner) を作る場合は `--json <work>/reports/flow-dependencies.json` も付けて raw facts (incremental 列込み) を出力する (`init_plan.py` が消費する)。
 
 ## 出力 (`flow-dependencies.md`)
 
 | セクション | 内容 | 消費者 |
 |---|---|---|
-| Per-flow inputs / outputs | フロー別の出力 PDS / 入力 (pds・vconn・other) / incremental (append 有無・control field、backfill 候補判定用) | tableau-migration-planner・architect |
-| In-scope dependency edges | consumer → producer エッジ (= 暫定 passthrough 対象の特定) | tableau-migration-planner・architect (self-check 項目 15) |
-| Topological migration order | producer 先行の着手順 | tableau-migration-planner |
+| Per-flow inputs / outputs | フロー別の出力 PDS / 入力 (pds・vconn・other) / incremental (append 有無・control field、backfill 候補判定用) | tableau-prep-migration-planner・architect |
+| In-scope dependency edges | consumer → producer エッジ (= 暫定 passthrough 対象の特定) | tableau-prep-migration-planner・architect (self-check 項目 15) |
+| Topological migration order | producer 先行の着手順 | tableau-prep-migration-planner |
 | Shared vconn tables | 同一 vconn テーブルを 2+ フローが読む一覧 (= stg 再利用候補) | architect (self-check 項目 15) |
 | Warnings | 同名出力 PDS の曖昧エッジ / 循環 | 全員 |

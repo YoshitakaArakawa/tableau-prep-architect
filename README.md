@@ -47,13 +47,13 @@ dbt のベストプラクティスを Prep に転用しますが、Tableau Workb
 
 ## 含まれる Skill / Workflow
 
-このリポジトリは 11 の Skill (`tableau-prep-extractor` / `tableau-prep-architect` / `tableau-prep-builder` / `tableau-prep-deployer` / `tableau-pds-comparator` / `tableau-pds-augmenter` / `tableau-schedule-designer` / `tableau-workbook-repointer` / `tableau-pulse-repointer` / `tableau-pds-backfiller` / `tableau-migration-planner`) で構成されています。各 Skill の役割と副作用区分は [CLAUDE.md](CLAUDE.md#skill-構成) にまとめてあります。
+このリポジトリは 11 の Skill (`tableau-prep-extractor` / `tableau-prep-architect` / `tableau-prep-builder` / `tableau-prep-deployer` / `tableau-pds-comparator` / `tableau-pds-augmenter` / `tableau-prep-schedule-designer` / `tableau-workbook-repointer` / `tableau-pulse-repointer` / `tableau-pds-backfiller` / `tableau-prep-migration-planner`) で構成されています。各 Skill の役割と副作用区分は [CLAUDE.md](CLAUDE.md#skill-構成) にまとめてあります。
 
 移行セッションの **entry-point** は [references/migration-workflow.md](references/migration-workflow.md) です。ユーザーが分析・分解・移行・publish・比較・スケジュール・repoint・backfill を依頼すると、Agent は CLAUDE.md の起動規則 (自動ロード) に従ってセッション冒頭でこの手順書を読み、intake (Q1-Q5)・workflow・停止点 (Stop 1/2) に沿って各 Skill を正しい順序で呼び出します。
 
 うち `tableau-pds-augmenter` は他 Skill から呼ばれる横断ユーティリティで、Published Data Source の column-level 改変 (rename / cast / hide) + Calculated Field 注入を担います。stg レイヤを .tfl ではなく Live PDS で表現するときに使われます。
 
-`tableau-schedule-designer` は移行後の新フロー群の定期実行 (Linked Task) を設計・検証する読み取り専用 Skill です。Linked Task は Cloud UI 専用で REST 作成できないため、人間が UI でセットアップするための設計資料を出し、作成後にサーバー実測と突合します。
+`tableau-prep-schedule-designer` は移行後の新フロー群の定期実行 (Linked Task) を設計・検証する読み取り専用 Skill です。Linked Task は Cloud UI 専用で REST 作成できないため、人間が UI でセットアップするための設計資料を出し、作成後にサーバー実測と突合します。
 
 `tableau-workbook-repointer` は移行後、旧 PDS を参照する Workbook を新 marts PDS へ差し替える Skill です。design (設計資料の生成) / repoint (TWB 手術による自動差し替え。リハーサル publish → 証拠レポート承認 → 本番 Overwrite の段取りゲート付き。サーバー書込) / verify (lineage 反映の検証) の 3 モードを持ちます。差し替えの既定は repoint モードで、手術不可ケース・権限制約時のみ人間が Tableau Desktop の Replace Data Source で差し替える fallback を runbook で支援します。
 
@@ -61,7 +61,7 @@ dbt のベストプラクティスを Prep に転用しますが、Tableau Workb
 
 `tableau-pds-backfiller` は移行完了後の**任意の後工程**です。incremental フローを分解すると新しい accumulator PDS は最新バッチしか持たないため、旧 output PDS にしか残っていない過去の累積履歴を hyper-level surgery で一度だけ seed します。取り消しにくい本番 Overwrite を含むので、dry-run → sandbox preview → 明示承認 → 本番 → 受け入れ incremental の段取りゲートを踏みます。
 
-`tableau-migration-planner` は複数フロー or 横断工程 (スケジュール / repoint / backfill) を含む移行の scope・移行順・人間作業キュー・進捗を 1 枚に集約するオーケストレーション台帳 (migration-plan.md + .json) を生成・更新します。フロー内設計には踏み込まず、セッション横断の resume state も兼ねます。
+`tableau-prep-migration-planner` は複数フロー or 横断工程 (スケジュール / repoint / backfill) を含む移行の scope・移行順・人間作業キュー・進捗を 1 枚に集約するオーケストレーション台帳 (migration-plan.md + .json) を生成・更新します。フロー内設計には踏み込まず、セッション横断の resume state も兼ねます。
 
 ## 既知の制限
 

@@ -1,5 +1,5 @@
 # flow-worker — fork 系 Skill (tableau-prep-extractor / tableau-prep-architect / tableau-prep-builder /
-# tableau-pds-comparator / tableau-schedule-designer / tableau-workbook-repointer /
+# tableau-pds-comparator / tableau-prep-schedule-designer / tableau-workbook-repointer /
 # tableau-pulse-repointer) を
 # 隔離実行するためのサブエージェント。Claude Code の `context: fork` の写像。
 # trusted プロジェクトでのみ有効 (.codex/config.toml の trust ゲート参照)。
