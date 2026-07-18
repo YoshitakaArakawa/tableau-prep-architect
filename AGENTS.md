@@ -8,7 +8,7 @@
 
 ## 起動規則 (最重要)
 
-ユーザーが既存 Prep フローの **分析 / 分解設計 / 移行 / Cloud publish / E2E 比較 / スケジュール設計 / Workbook repoint / backfill** を依頼したら、他の作業に入る前に **必ず [prep-migrate](.claude/skills/prep-migrate/SKILL.md) の SKILL.md を読み**、その Workflow / Session intake 手順に従ってください。移行タスクの実行手順 (workflow 図・intake Q1-Q5・Stop 1/2・deploy-context ライフサイクル・goal ゲート・targeted fix ループ・courier 責務) は prep-migrate が正典で、本ファイルには持ちません。
+ユーザーが既存 Prep フローの **分析 / 分解設計 / 移行 / Cloud publish / E2E 比較 / スケジュール設計 / Workbook repoint / Pulse repoint / backfill** を依頼したら、他の作業に入る前に **必ず [prep-migrate](.claude/skills/prep-migrate/SKILL.md) の SKILL.md を読み**、その Workflow / Session intake 手順に従ってください。移行タスクの実行手順 (workflow 図・intake Q1-Q5・Stop 1/2・deploy-context ライフサイクル・goal ゲート・targeted fix ループ・courier 責務) は prep-migrate が正典で、本ファイルには持ちません。
 
 `$prep-migrate` のように明示起動しても、自然言語依頼で暗黙起動しても構いません。いずれの経路でも、実体の手順は正典 SKILL.md を読んで実行します。
 
@@ -27,12 +27,13 @@
 | prep-pds-augmenter | PDS への calc 注入 + column transforms (rename/cast/hide) | [.claude/skills/prep-pds-augmenter/SKILL.md](.claude/skills/prep-pds-augmenter/SKILL.md) | 主会話 |
 | prep-schedule-designer | design (Linked Task 設計資料) / verify (UI 作成後にサーバー実測突合) | [.claude/skills/prep-schedule-designer/SKILL.md](.claude/skills/prep-schedule-designer/SKILL.md) | サブエージェント委譲 (flow-worker) |
 | prep-workbook-repointer | design (旧 PDS 参照 WB 棚卸し + 旧→新 対応) / verify (Replace 後 lineage 突合) | [.claude/skills/prep-workbook-repointer/SKILL.md](.claude/skills/prep-workbook-repointer/SKILL.md) | サブエージェント委譲 (flow-worker) |
+| prep-pulse-repointer | design (旧 PDS 参照 Pulse 定義 + follower 棚卸し) / repoint (コピー定義作成 + metric/購読再作成、rehearsal→承認→production の段取りゲート付き) / verify (実測突合) | [.claude/skills/prep-pulse-repointer/SKILL.md](.claude/skills/prep-pulse-repointer/SKILL.md) | サブエージェント委譲 (flow-worker) |
 | prep-pds-backfiller | incremental accumulator に旧 output PDS 履歴を seed。段取りゲート付き | [.claude/skills/prep-pds-backfiller/SKILL.md](.claude/skills/prep-pds-backfiller/SKILL.md) | 主会話 |
 | prep-migration-planner | 複数フロー/横断工程の scope・移行順・人間作業・進捗を migration-plan に集約 | [.claude/skills/prep-migration-planner/SKILL.md](.claude/skills/prep-migration-planner/SKILL.md) | 主会話 |
 
-役割対称性: 読み取り = prep-extractor + prep-output-comparator + prep-schedule-designer + prep-workbook-repointer / 書き込み = prep-deployer (+ augmenter, backfiller) / オーケストレーション = prep-migrate (手順) + prep-migration-planner (セッション横断台帳)。
+役割対称性: 読み取り = prep-extractor + prep-output-comparator + prep-schedule-designer + prep-workbook-repointer / 書き込み = prep-deployer (+ augmenter, backfiller, pulse-repointer の repoint モード) / オーケストレーション = prep-migrate (手順) + prep-migration-planner (セッション横断台帳)。
 
-Codex 向けの入口は `.agents/skills/<name>/SKILL.md` (11 個の薄い wrapper) です。wrapper は正典 SKILL.md へのリンクと実行モードの指示だけを持ち、実体は上表の正典パスを読んで実行します。
+Codex 向けの入口は `.agents/skills/<name>/SKILL.md` (12 個の薄い wrapper) です。wrapper は正典 SKILL.md へのリンクと実行モードの指示だけを持ち、実体は上表の正典パスを読んで実行します。
 
 ## Claude Code 記法の読み替え表
 
@@ -51,7 +52,7 @@ Codex 向けの入口は `.agents/skills/<name>/SKILL.md` (11 個の薄い wrapp
 
 ### fork の意味論
 
-正典で `context: fork` が付く 6 Skill (prep-extractor / prep-architect / prep-builder / prep-output-comparator / prep-schedule-designer / prep-workbook-repointer) の fork には 3 つの意義があります:
+正典で `context: fork` が付く 7 Skill (prep-extractor / prep-architect / prep-builder / prep-output-comparator / prep-schedule-designer / prep-workbook-repointer / prep-pulse-repointer) の fork には 3 つの意義があります:
 
 - (a) **メイン会話のコンテキスト保護** — 大きな JSON / 中間生成物を主会話に流さない
 - (b) **会話履歴なし前提の入力明示契約** — 呼び出し時に必要情報を文章ですべて渡す (fork 側は「会話に出ていたはず」を前提にしない)

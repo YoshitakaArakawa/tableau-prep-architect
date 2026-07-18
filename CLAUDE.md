@@ -6,7 +6,7 @@
 
 ## 起動規則 (最重要)
 
-ユーザーが既存 Prep フローの **分析 / 分解設計 / 移行 / Cloud publish / E2E 比較 / スケジュール設計 / Workbook repoint / backfill** を依頼したら、他の作業に入る前に **必ず [prep-migrate](.claude/skills/prep-migrate/SKILL.md) skill を起動**し、その Workflow / Session intake 手順に従う。移行タスクの実行手順 (workflow 図・intake Q1-Q5・Stop 1/2・deploy-context ライフサイクル・goal ゲート・targeted fix ループ・courier 責務) は prep-migrate が正典で、CLAUDE.md には持たない。
+ユーザーが既存 Prep フローの **分析 / 分解設計 / 移行 / Cloud publish / E2E 比較 / スケジュール設計 / Workbook repoint / Pulse repoint / backfill** を依頼したら、他の作業に入る前に **必ず [prep-migrate](.claude/skills/prep-migrate/SKILL.md) skill を起動**し、その Workflow / Session intake 手順に従う。移行タスクの実行手順 (workflow 図・intake Q1-Q5・Stop 1/2・deploy-context ライフサイクル・goal ゲート・targeted fix ループ・courier 責務) は prep-migrate が正典で、CLAUDE.md には持たない。
 
 ## Skill 構成
 
@@ -21,10 +21,11 @@
 | [prep-pds-augmenter](.claude/skills/prep-pds-augmenter/SKILL.md) | PDS への calc 注入 + column transforms (rename/cast/hide)。stg を Live PDS で表現する経路 | サーバー書込 (PDS publish) |
 | [prep-schedule-designer](.claude/skills/prep-schedule-designer/SKILL.md) | design (Linked Task 設計資料) / verify (UI 作成後にサーバー実測突合) (fork) | ローカル / Cloud 読み取りのみ |
 | [prep-workbook-repointer](.claude/skills/prep-workbook-repointer/SKILL.md) | design (旧 PDS 参照 WB 棚卸し + 旧→新 対応) / verify (Replace 後 lineage 突合) (fork) | ローカル / Cloud 読み取りのみ |
+| [prep-pulse-repointer](.claude/skills/prep-pulse-repointer/SKILL.md) | design (旧 PDS 参照 Pulse 定義 + follower 棚卸し) / repoint (コピー定義作成 + metric/購読再作成、rehearsal→承認→production の段取りゲート付き) / verify (実測突合) (fork) | サーバー書込 (Pulse 定義/購読作成、repoint モードのみ) |
 | [prep-pds-backfiller](.claude/skills/prep-pds-backfiller/SKILL.md) | incremental accumulator に旧 output PDS 履歴を seed。段取りゲート付き | サーバー書込 (本番 PDS Overwrite) |
 | [prep-migration-planner](.claude/skills/prep-migration-planner/SKILL.md) | 複数フロー/横断工程の scope・移行順・人間作業・進捗を migration-plan に集約 (fork なし) | ローカル |
 
-役割対称性: 読み取り = prep-extractor + prep-output-comparator + prep-schedule-designer + prep-workbook-repointer / 書き込み = prep-deployer (+ augmenter, backfiller) / オーケストレーション = prep-migrate (手順) + prep-migration-planner (セッション横断台帳)。
+役割対称性: 読み取り = prep-extractor + prep-output-comparator + prep-schedule-designer + prep-workbook-repointer / 書き込み = prep-deployer (+ augmenter, backfiller, pulse-repointer の repoint モード) / オーケストレーション = prep-migrate (手順) + prep-migration-planner (セッション横断台帳)。
 
 ## work/ ディレクトリ規約
 
@@ -56,7 +57,7 @@ REST 認証は OAuth 2.0 (Authorization Code + PKCE) のブラウザサインイ
 OpenAI Codex ユーザー向けの入口を別途持つ。Skill の正典は `.claude/skills/` のままで、Codex 向けは薄い wrapper + 読み替え方式:
 
 - [AGENTS.md](AGENTS.md) — Codex エントリポイント。この CLAUDE.md と同内容の規範 + Claude Code 固有記法 (`context: fork` / `model` / `${CLAUDE_SKILL_DIR}` 等) の読み替え表を持つ
-- `.agents/skills/<name>/SKILL.md` — 11 個の thin wrapper。正典 SKILL.md へのリンクと実行モード指示のみ (`scripts/sync_agents_skills.py` で生成)
+- `.agents/skills/<name>/SKILL.md` — 12 個の thin wrapper。正典 SKILL.md へのリンクと実行モード指示のみ (`scripts/sync_agents_skills.py` で生成)
 - `.codex/` — trust ゲート・MCP テンプレート・サブエージェント定義 (flow-worker / flow-worker-lite)。trusted プロジェクトでのみ有効
 
 この CLAUDE.md (起動規則・Skill 構成・work/ 規約・repo 構造・認証) や Skill の `description` を変更したら、AGENTS.md と wrapper の同期を取り、`python scripts/sync_agents_skills.py --check` (exit 0 = 同期済み) で検証する。
