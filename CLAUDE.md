@@ -12,19 +12,19 @@
 
 | Skill | 役割 | 副作用 |
 |---|---|---|
-| [prep-extractor](.claude/skills/prep-extractor/SKILL.md) | Phase A flow→flow-summary / Phase B Cloud 階層+Input 分類+PDS LUID→deploy-context / Phase C flow 依存マップ (複数フロー時) (fork) | ローカル / Cloud 読み取りのみ |
-| [prep-architect](.claude/skills/prep-architect/SKILL.md) | analyze (業務解釈・レイヤ推定) + decompose (分解設計、Stop 2 でユーザー確認) (fork) | ローカル |
-| [prep-builder](.claude/skills/prep-builder/SKILL.md) | 設計案から .tfl 群を組み立て (fork で元 .tfl JSON を隔離) | ローカル |
-| [prep-deployer](.claude/skills/prep-deployer/SKILL.md) | preflight / publish / run。合意のみで一気通貫、失敗は autonomous-recovery で自律ループ | サーバー書込 |
-| [prep-output-comparator](.claude/skills/prep-output-comparator/SKILL.md) | 元 PDS vs 分解後 PDS の列差分 + 全体行数差分を Markdown 出力 (fork) | ローカル / Cloud 読み取りのみ |
-| [prep-pds-augmenter](.claude/skills/prep-pds-augmenter/SKILL.md) | PDS への calc 注入 + column transforms (rename/cast/hide)。stg を Live PDS で表現する経路 | サーバー書込 (PDS publish) |
-| [prep-schedule-designer](.claude/skills/prep-schedule-designer/SKILL.md) | design (Linked Task 設計資料) / verify (UI 作成後にサーバー実測突合) (fork) | ローカル / Cloud 読み取りのみ |
-| [prep-workbook-repointer](.claude/skills/prep-workbook-repointer/SKILL.md) | design (旧 PDS 参照 WB 棚卸し + 旧→新 対応) / repoint (TWB 手術で自動差し替え、リハーサル→承認→本番の段取りゲート付き) / verify (lineage 突合) (fork) | サーバー書込 (WB republish、repoint モードのみ) |
-| [prep-pulse-repointer](.claude/skills/prep-pulse-repointer/SKILL.md) | design (旧 PDS 参照 Pulse 定義 + follower 棚卸し) / repoint (コピー定義作成 + metric/購読再作成、rehearsal→承認→production の段取りゲート付き) / verify (実測突合) (fork) | サーバー書込 (Pulse 定義/購読作成、repoint モードのみ) |
-| [prep-pds-backfiller](.claude/skills/prep-pds-backfiller/SKILL.md) | incremental accumulator に旧 output PDS 履歴を seed。段取りゲート付き | サーバー書込 (本番 PDS Overwrite) |
-| [prep-migration-planner](.claude/skills/prep-migration-planner/SKILL.md) | 複数フロー/横断工程の scope・移行順・人間作業・進捗を migration-plan に集約 (fork なし) | ローカル |
+| [tableau-prep-extractor](.claude/skills/tableau-prep-extractor/SKILL.md) | Phase A flow→flow-summary / Phase B Cloud 階層+Input 分類+PDS LUID→deploy-context / Phase C flow 依存マップ (複数フロー時) (fork) | ローカル / Cloud 読み取りのみ |
+| [tableau-prep-architect](.claude/skills/tableau-prep-architect/SKILL.md) | analyze (業務解釈・レイヤ推定) + decompose (分解設計、Stop 2 でユーザー確認) (fork) | ローカル |
+| [tableau-prep-builder](.claude/skills/tableau-prep-builder/SKILL.md) | 設計案から .tfl 群を組み立て (fork で元 .tfl JSON を隔離) | ローカル |
+| [tableau-prep-deployer](.claude/skills/tableau-prep-deployer/SKILL.md) | preflight / publish / run。合意のみで一気通貫、失敗は autonomous-recovery で自律ループ | サーバー書込 |
+| [tableau-pds-comparator](.claude/skills/tableau-pds-comparator/SKILL.md) | 元 PDS vs 分解後 PDS の列差分 + 全体行数差分を Markdown 出力 (fork) | ローカル / Cloud 読み取りのみ |
+| [tableau-pds-augmenter](.claude/skills/tableau-pds-augmenter/SKILL.md) | PDS への calc 注入 + column transforms (rename/cast/hide)。stg を Live PDS で表現する経路 | サーバー書込 (PDS publish) |
+| [tableau-prep-schedule-designer](.claude/skills/tableau-prep-schedule-designer/SKILL.md) | design (Linked Task 設計資料) / verify (UI 作成後にサーバー実測突合) (fork) | ローカル / Cloud 読み取りのみ |
+| [tableau-workbook-repointer](.claude/skills/tableau-workbook-repointer/SKILL.md) | design (旧 PDS 参照 WB 棚卸し + 旧→新 対応) / repoint (TWB 手術で自動差し替え、リハーサル→承認→本番の段取りゲート付き) / verify (lineage 突合) (fork) | サーバー書込 (WB republish、repoint モードのみ) |
+| [tableau-pulse-repointer](.claude/skills/tableau-pulse-repointer/SKILL.md) | design (旧 PDS 参照 Pulse 定義 + follower 棚卸し) / repoint (コピー定義作成 + metric/購読再作成、rehearsal→承認→production の段取りゲート付き) / verify (実測突合) (fork) | サーバー書込 (Pulse 定義/購読作成、repoint モードのみ) |
+| [tableau-pds-backfiller](.claude/skills/tableau-pds-backfiller/SKILL.md) | incremental accumulator に旧 output PDS 履歴を seed。段取りゲート付き | サーバー書込 (本番 PDS Overwrite) |
+| [tableau-prep-migration-planner](.claude/skills/tableau-prep-migration-planner/SKILL.md) | 複数フロー/横断工程の scope・移行順・人間作業・進捗を migration-plan に集約 (fork なし) | ローカル |
 
-役割対称性: 読み取り = prep-extractor + prep-output-comparator + prep-schedule-designer / 書き込み = prep-deployer (+ augmenter, backfiller, workbook-repointer / pulse-repointer の repoint モード) / オーケストレーション = [references/migration-workflow.md](references/migration-workflow.md) (手順) + prep-migration-planner (セッション横断台帳)。
+役割対称性: 読み取り = tableau-prep-extractor + tableau-pds-comparator + tableau-prep-schedule-designer / 書き込み = tableau-prep-deployer (+ augmenter, backfiller, workbook-repointer / pulse-repointer の repoint モード) / オーケストレーション = [references/migration-workflow.md](references/migration-workflow.md) (手順) + tableau-prep-migration-planner (セッション横断台帳)。
 
 ## work/ ディレクトリ規約
 
@@ -41,15 +41,15 @@
 | 場所 | 入る対象 |
 |---|---|
 | repo 直下 `scripts/` | **2 つ以上の Skill が import / 呼び出す** 共通モジュール (例: `tableau_auth.py`, `flow_io.py`, `publish_manifest.py`)、**main agent が migration-workflow の手順として直接実行する orchestrator** (例: `consumer_probe.py`, `run_layer.py`)、**セッション生成スクリプトが import する helper** (例: `build_helpers.py`) |
-| `.claude/skills/<skill>/scripts/` | **その Skill 専用、外から呼ばれない** (例: prep-extractor の `inspect_actions.py`、prep-deployer の `publish_flow.py`) |
+| `.claude/skills/<skill>/scripts/` | **その Skill 専用、外から呼ばれない** (例: tableau-prep-extractor の `inspect_actions.py`、tableau-prep-deployer の `publish_flow.py`) |
 | repo 直下 `references/` | **2 つ以上の Skill が参照する共通規約・スキーマ・ポリシー** (例: `input-policy.md`, `naming-conventions.md`, `tfl-json-schema.md`, `project-hierarchy.md`) |
 | `.claude/skills/<skill>/references/` | **その Skill 専用のレシピ・フォーマット仕様** (例: `flow-summary-format.md`, `build-recipe.md`, `preflight-recipe.md`) |
 
-判断基準: **2 つ以上で使うなら repo 直下、単一 Skill 内で完結するなら Skill 配下**。Skill 配下のファイルを別 Skill も使いたくなったら repo 直下に **昇格** する (ファイル移動 + 参照箇所更新、転送 stub は置かない)。逆向き (repo 直下 → Skill 配下) は基本ない。例外: repo 直下の orchestrator が Skill 配下のスクリプトを subprocess で呼ぶことは許容する (例: `run_layer.py` → prep-deployer の `run_flow.py`)。
+判断基準: **2 つ以上で使うなら repo 直下、単一 Skill 内で完結するなら Skill 配下**。Skill 配下のファイルを別 Skill も使いたくなったら repo 直下に **昇格** する (ファイル移動 + 参照箇所更新、転送 stub は置かない)。逆向き (repo 直下 → Skill 配下) は基本ない。例外: repo 直下の orchestrator が Skill 配下のスクリプトを subprocess で呼ぶことは許容する (例: `run_layer.py` → tableau-prep-deployer の `run_flow.py`)。
 
 ## 認証情報の運用
 
-REST 認証は OAuth 2.0 (Authorization Code + PKCE) のブラウザサインイン。`.env` は `SERVER` / `SITE_NAME` のみ (secret を持たない、[.env.template](.env.template) 参照、実 `.env` は `.gitignore` 済)。実装は [scripts/tableau_auth.py](scripts/tableau_auth.py) (`signed_in_server()`)、`access_token` は `.auth-cache/session.json` にキャッシュ。詳細運用 (logout / status / CI 向け PAT 切り出し等) は [prep-deployer/references/authentication.md](.claude/skills/prep-deployer/references/authentication.md)。
+REST 認証は OAuth 2.0 (Authorization Code + PKCE) のブラウザサインイン。`.env` は `SERVER` / `SITE_NAME` のみ (secret を持たない、[.env.template](.env.template) 参照、実 `.env` は `.gitignore` 済)。実装は [scripts/tableau_auth.py](scripts/tableau_auth.py) (`signed_in_server()`)、`access_token` は `.auth-cache/session.json` にキャッシュ。詳細運用 (logout / status / CI 向け PAT 切り出し等) は [tableau-prep-deployer/references/authentication.md](.claude/skills/tableau-prep-deployer/references/authentication.md)。
 
 ## Codex 対応
 

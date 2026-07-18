@@ -31,11 +31,11 @@ note: フォーマット、Skill 別 breakdown 推奨項目、実装ガイドを
 
 | Skill | breakdown |
 |---|---|
-| prep-extractor Phase A | input load (.tfl 展開) / topology 抽出 / actions inventory / Mermaid 生成 / write |
-| prep-extractor Phase B | project tree fetch (1-pass) / dispatch classify (1-pass) / also-scan rescan / dispatch classify (final) / write |
-| prep-architect | input read (flow-summary etc.) / analyze 本体 / decompose 本体 / self-check / write |
-| prep-builder | plan parse / source flow load / per-tfl build (8 .tfl の合計) / manifest init / write |
-| prep-output-comparator | pair resolve / metadata API (N 件) / query-datasource (N 件) / flag check / write |
+| tableau-prep-extractor Phase A | input load (.tfl 展開) / topology 抽出 / actions inventory / Mermaid 生成 / write |
+| tableau-prep-extractor Phase B | project tree fetch (1-pass) / dispatch classify (1-pass) / also-scan rescan / dispatch classify (final) / write |
+| tableau-prep-architect | input read (flow-summary etc.) / analyze 本体 / decompose 本体 / self-check / write |
+| tableau-prep-builder | plan parse / source flow load / per-tfl build (8 .tfl の合計) / manifest init / write |
+| tableau-pds-comparator | pair resolve / metadata API (N 件) / query-datasource (N 件) / flag check / write |
 
 ## 実装ガイド
 
@@ -54,7 +54,7 @@ end = time.monotonic()
 # elapsed = end - t0; breakdown = diffs between consecutive entries
 ```
 
-Skill が複数のスクリプトを呼ぶ場合 (例: prep-extractor は Python + bash の混在) は、各スクリプトの stderr / stdout の最終行で `[timing] phase=<name> elapsed=<sec>` を吐き、Skill 本体がそれを集約する。
+Skill が複数のスクリプトを呼ぶ場合 (例: tableau-prep-extractor は Python + bash の混在) は、各スクリプトの stderr / stdout の最終行で `[timing] phase=<name> elapsed=<sec>` を吐き、Skill 本体がそれを集約する。
 
 ## 例
 

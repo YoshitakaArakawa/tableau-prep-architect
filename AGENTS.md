@@ -16,19 +16,19 @@
 
 | Skill | 役割 | 正典パス | 実行モード |
 |---|---|---|---|
-| prep-extractor | Phase A flow→flow-summary / Phase B Cloud 階層+Input 分類+PDS LUID→deploy-context / Phase C flow 依存マップ (複数フロー時) | [.claude/skills/prep-extractor/SKILL.md](.claude/skills/prep-extractor/SKILL.md) | サブエージェント委譲 (flow-worker-lite) |
-| prep-architect | analyze (業務解釈・レイヤ推定) + decompose (分解設計、Stop 2 でユーザー確認) | [.claude/skills/prep-architect/SKILL.md](.claude/skills/prep-architect/SKILL.md) | サブエージェント委譲 (flow-worker) |
-| prep-builder | 設計案から .tfl 群を組み立て (元 .tfl JSON を隔離) | [.claude/skills/prep-builder/SKILL.md](.claude/skills/prep-builder/SKILL.md) | サブエージェント委譲 (flow-worker) |
-| prep-deployer | preflight / publish / run。合意のみで一気通貫、失敗は autonomous-recovery で自律ループ | [.claude/skills/prep-deployer/SKILL.md](.claude/skills/prep-deployer/SKILL.md) | 主会話 |
-| prep-output-comparator | 元 PDS vs 分解後 PDS の列差分 + 全体行数差分を Markdown 出力 | [.claude/skills/prep-output-comparator/SKILL.md](.claude/skills/prep-output-comparator/SKILL.md) | サブエージェント委譲 (flow-worker) |
-| prep-pds-augmenter | PDS への calc 注入 + column transforms (rename/cast/hide) | [.claude/skills/prep-pds-augmenter/SKILL.md](.claude/skills/prep-pds-augmenter/SKILL.md) | 主会話 |
-| prep-schedule-designer | design (Linked Task 設計資料) / verify (UI 作成後にサーバー実測突合) | [.claude/skills/prep-schedule-designer/SKILL.md](.claude/skills/prep-schedule-designer/SKILL.md) | サブエージェント委譲 (flow-worker) |
-| prep-workbook-repointer | design (旧 PDS 参照 WB 棚卸し + 旧→新 対応) / repoint (TWB 手術で自動差し替え、リハーサル→承認→本番の段取りゲート付き) / verify (lineage 突合) | [.claude/skills/prep-workbook-repointer/SKILL.md](.claude/skills/prep-workbook-repointer/SKILL.md) | サブエージェント委譲 (flow-worker) |
-| prep-pulse-repointer | design (旧 PDS 参照 Pulse 定義 + follower 棚卸し) / repoint (コピー定義作成 + metric/購読再作成、rehearsal→承認→production の段取りゲート付き) / verify (実測突合) | [.claude/skills/prep-pulse-repointer/SKILL.md](.claude/skills/prep-pulse-repointer/SKILL.md) | サブエージェント委譲 (flow-worker) |
-| prep-pds-backfiller | incremental accumulator に旧 output PDS 履歴を seed。段取りゲート付き | [.claude/skills/prep-pds-backfiller/SKILL.md](.claude/skills/prep-pds-backfiller/SKILL.md) | 主会話 |
-| prep-migration-planner | 複数フロー/横断工程の scope・移行順・人間作業・進捗を migration-plan に集約 | [.claude/skills/prep-migration-planner/SKILL.md](.claude/skills/prep-migration-planner/SKILL.md) | 主会話 |
+| tableau-prep-extractor | Phase A flow→flow-summary / Phase B Cloud 階層+Input 分類+PDS LUID→deploy-context / Phase C flow 依存マップ (複数フロー時) | [.claude/skills/tableau-prep-extractor/SKILL.md](.claude/skills/tableau-prep-extractor/SKILL.md) | サブエージェント委譲 (flow-worker-lite) |
+| tableau-prep-architect | analyze (業務解釈・レイヤ推定) + decompose (分解設計、Stop 2 でユーザー確認) | [.claude/skills/tableau-prep-architect/SKILL.md](.claude/skills/tableau-prep-architect/SKILL.md) | サブエージェント委譲 (flow-worker) |
+| tableau-prep-builder | 設計案から .tfl 群を組み立て (元 .tfl JSON を隔離) | [.claude/skills/tableau-prep-builder/SKILL.md](.claude/skills/tableau-prep-builder/SKILL.md) | サブエージェント委譲 (flow-worker) |
+| tableau-prep-deployer | preflight / publish / run。合意のみで一気通貫、失敗は autonomous-recovery で自律ループ | [.claude/skills/tableau-prep-deployer/SKILL.md](.claude/skills/tableau-prep-deployer/SKILL.md) | 主会話 |
+| tableau-pds-comparator | 元 PDS vs 分解後 PDS の列差分 + 全体行数差分を Markdown 出力 | [.claude/skills/tableau-pds-comparator/SKILL.md](.claude/skills/tableau-pds-comparator/SKILL.md) | サブエージェント委譲 (flow-worker) |
+| tableau-pds-augmenter | PDS への calc 注入 + column transforms (rename/cast/hide) | [.claude/skills/tableau-pds-augmenter/SKILL.md](.claude/skills/tableau-pds-augmenter/SKILL.md) | 主会話 |
+| tableau-prep-schedule-designer | design (Linked Task 設計資料) / verify (UI 作成後にサーバー実測突合) | [.claude/skills/tableau-prep-schedule-designer/SKILL.md](.claude/skills/tableau-prep-schedule-designer/SKILL.md) | サブエージェント委譲 (flow-worker) |
+| tableau-workbook-repointer | design (旧 PDS 参照 WB 棚卸し + 旧→新 対応) / repoint (TWB 手術で自動差し替え、リハーサル→承認→本番の段取りゲート付き) / verify (lineage 突合) | [.claude/skills/tableau-workbook-repointer/SKILL.md](.claude/skills/tableau-workbook-repointer/SKILL.md) | サブエージェント委譲 (flow-worker) |
+| tableau-pulse-repointer | design (旧 PDS 参照 Pulse 定義 + follower 棚卸し) / repoint (コピー定義作成 + metric/購読再作成、rehearsal→承認→production の段取りゲート付き) / verify (実測突合) | [.claude/skills/tableau-pulse-repointer/SKILL.md](.claude/skills/tableau-pulse-repointer/SKILL.md) | サブエージェント委譲 (flow-worker) |
+| tableau-pds-backfiller | incremental accumulator に旧 output PDS 履歴を seed。段取りゲート付き | [.claude/skills/tableau-pds-backfiller/SKILL.md](.claude/skills/tableau-pds-backfiller/SKILL.md) | 主会話 |
+| tableau-prep-migration-planner | 複数フロー/横断工程の scope・移行順・人間作業・進捗を migration-plan に集約 | [.claude/skills/tableau-prep-migration-planner/SKILL.md](.claude/skills/tableau-prep-migration-planner/SKILL.md) | 主会話 |
 
-役割対称性: 読み取り = prep-extractor + prep-output-comparator + prep-schedule-designer / 書き込み = prep-deployer (+ augmenter, backfiller, workbook-repointer / pulse-repointer の repoint モード) / オーケストレーション = [references/migration-workflow.md](references/migration-workflow.md) (手順) + prep-migration-planner (セッション横断台帳)。
+役割対称性: 読み取り = tableau-prep-extractor + tableau-pds-comparator + tableau-prep-schedule-designer / 書き込み = tableau-prep-deployer (+ augmenter, backfiller, workbook-repointer / pulse-repointer の repoint モード) / オーケストレーション = [references/migration-workflow.md](references/migration-workflow.md) (手順) + tableau-prep-migration-planner (セッション横断台帳)。
 
 Codex 向けの入口は `.agents/skills/<name>/SKILL.md` (11 個の薄い wrapper) です。wrapper は正典 SKILL.md へのリンクと実行モードの指示だけを持ち、実体は上表の正典パスを読んで実行します。
 
@@ -40,7 +40,7 @@ Codex 向けの入口は `.agents/skills/<name>/SKILL.md` (11 個の薄い wrapp
 |---|---|
 | frontmatter `context: fork` | サブエージェントに委譲して実行する (下記「fork の意味論」参照)。委譲できない環境ではインライン実行してよいが、出力契約は必ず維持する |
 | frontmatter `agent: general-purpose` | 既定のサブエージェント種別で可。特別な指定は不要 |
-| frontmatter `model: haiku` | 軽量・機械的タスク。低 reasoning effort で実行する (`.codex/agents/flow-worker-lite.toml`)。対象は prep-extractor のみ |
+| frontmatter `model: haiku` | 軽量・機械的タスク。低 reasoning effort で実行する (`.codex/agents/flow-worker-lite.toml`)。対象は tableau-prep-extractor のみ |
 | frontmatter `model: sonnet` / 無指定 | 標準の reasoning effort で実行する (`.codex/agents/flow-worker.toml`) |
 | frontmatter `allowed-tools` | 無視する。Codex の approval / sandbox 設定に従う (ツール制限は Codex 側の権限モデルが担う) |
 | `${CLAUDE_SKILL_DIR}` | その SKILL.md が置かれているディレクトリ (= `.claude/skills/<name>`) に読み替える。相対パスの基準点として使う |
@@ -49,7 +49,7 @@ Codex 向けの入口は `.agents/skills/<name>/SKILL.md` (11 個の薄い wrapp
 
 ### fork の意味論
 
-正典で `context: fork` が付く 7 Skill (prep-extractor / prep-architect / prep-builder / prep-output-comparator / prep-schedule-designer / prep-workbook-repointer / prep-pulse-repointer) の fork には 3 つの意義があります:
+正典で `context: fork` が付く 7 Skill (tableau-prep-extractor / tableau-prep-architect / tableau-prep-builder / tableau-pds-comparator / tableau-prep-schedule-designer / tableau-workbook-repointer / tableau-pulse-repointer) の fork には 3 つの意義があります:
 
 - (a) **メイン会話のコンテキスト保護** — 大きな JSON / 中間生成物を主会話に流さない
 - (b) **会話履歴なし前提の入力明示契約** — 呼び出し時に必要情報を文章ですべて渡す (fork 側は「会話に出ていたはず」を前提にしない)
@@ -57,7 +57,7 @@ Codex 向けの入口は `.agents/skills/<name>/SKILL.md` (11 個の薄い wrapp
 
 **Codex への写像**: fork 系 Skill は、`.codex/agents/` のサブエージェント (flow-worker / flow-worker-lite) に委譲して実行します。サブエージェント機能が使えない場合は組み込みのサブエージェント、それも無ければインライン実行にフォールバックして構いません。**ただしどの経路でも (b) 入力明示契約と (c) 出力契約 (ファイル出力・主会話へ中間 JSON を流さない・返答は要約 + Timing ブロック) は必ず維持します**。インライン実行はコンテキスト隔離 (a) の保証が弱まるだけで、契約自体は免除されません。
 
-fork しない 4 Skill (prep-migration-planner / prep-deployer / prep-pds-augmenter / prep-pds-backfiller) は、**ユーザー承認ゲート・失敗観測を主会話で扱う**ための意図的設計です。これらはサブエージェントに委譲せず、主会話で実行してください。
+fork しない 4 Skill (tableau-prep-migration-planner / tableau-prep-deployer / tableau-pds-augmenter / tableau-pds-backfiller) は、**ユーザー承認ゲート・失敗観測を主会話で扱う**ための意図的設計です。これらはサブエージェントに委譲せず、主会話で実行してください。
 
 ## work/ ディレクトリ規約
 

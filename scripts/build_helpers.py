@@ -1,4 +1,4 @@
-"""Shared helpers for prep-builder per-session build scripts.
+"""Shared helpers for tableau-prep-builder per-session build scripts.
 
 Promotes the small set of utilities that every `build_tfls.py` previously
 re-implemented at the top of the file (`empty_flow`, `reset_next_nodes`,

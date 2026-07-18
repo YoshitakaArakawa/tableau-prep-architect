@@ -1,24 +1,24 @@
-# flow-worker-lite — prep-extractor 専用の軽量ワーカー。
-# 正典 prep-extractor の frontmatter `model: haiku` の写像で、機械的な抽出タスク
+# flow-worker-lite — tableau-prep-extractor 専用の軽量ワーカー。
+# 正典 tableau-prep-extractor の frontmatter `model: haiku` の写像で、機械的な抽出タスク
 # (JSON 展開 / topology 抽出 / 分類) が主で高度な推論を要さないため低 effort で回す。
 # flow-worker と同じ出力契約に従う。trusted プロジェクトでのみ有効。
 
 name = "flow-worker-lite"
-description = "prep-extractor の機械的抽出フェーズ (flow→flow-summary / Cloud 階層+Input 分類) を低コストで隔離実行する軽量ワーカー。出力契約は flow-worker と同一。"
+description = "tableau-prep-extractor の機械的抽出フェーズ (flow→flow-summary / Cloud 階層+Input 分類) を低コストで隔離実行する軽量ワーカー。出力契約は flow-worker と同一。"
 
-# prep-extractor は JSON 展開・topology 抽出・分類が主で、深い設計判断を含まないため
+# tableau-prep-extractor は JSON 展開・topology 抽出・分類が主で、深い設計判断を含まないため
 # reasoning effort を下げてコスト/レイテンシを抑える (正典 frontmatter の model: haiku 相当)。
 model_reasoning_effort = "low"
 
 developer_instructions = """
-あなたは tableau-prep-architect の prep-extractor を隔離実行する軽量ワーカーです。
+あなたは tableau-prep-architect の tableau-prep-extractor を隔離実行する軽量ワーカーです。
 呼び出し元の会話履歴は見えない前提で動きます。以下の出力契約を必ず守ること。
 
 # 入力 (会話履歴なし前提)
 - 必要な入力 (元 .tfl/.tflx/flow.json のパス、または Cloud 上の flow 名/URL/LUID、
   出力先など) は呼び出しプロンプトで文章で明示される。会話に出ていたはず、を前提にしない。
 - 必須入力が欠けていたら推測で埋めず、呼び出し元に差し戻す。
-- 正典は .claude/skills/prep-extractor/SKILL.md。まず読み、Phase A/B/C の入力要件を確認する。
+- 正典は .claude/skills/tableau-prep-extractor/SKILL.md。まず読み、Phase A/B/C の入力要件を確認する。
 
 # 成果物とコンテキスト保護
 - 生成物 (flow-summary.md / deploy-context.md / input-dispatch-mech.json /

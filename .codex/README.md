@@ -6,7 +6,7 @@ OpenAI Codex 向けのプロジェクト単位設定です。Skill の正典は 
 
 - `config.toml.template` — Tableau MCP サーバー構成のテンプレート (既定は全行コメントアウト) と trust ゲートの説明。実際に使う `config.toml` は各自がここからコピーして作る (`.gitignore` 済)。
 - `agents/flow-worker.toml` — fork 系 Skill (extract / analyze / decompose / build / compare 等) を隔離実行するサブエージェント定義。
-- `agents/flow-worker-lite.toml` — prep-extractor 用の軽量版 (低 reasoning effort)。
+- `agents/flow-worker-lite.toml` — tableau-prep-extractor 用の軽量版 (低 reasoning effort)。
 
 ## trust しないと無視される
 

@@ -20,7 +20,7 @@ work/
 │   ├── downloaded.tflx               # 入力
 │   ├── flow.json                     # 入力 (展開済)
 │   ├── reports/                      # Skill 生成 MD/JSON
-│   ├── flows/                        # prep-builder 出力 .tfl
+│   ├── flows/                        # tableau-prep-builder 出力 .tfl
 │   ├── scripts/                      # 公式の再生成スクリプト
 │   └── scratch/                      # 試行錯誤・使い捨て
 ├── 20260520_int-step-split-experiment/
@@ -39,8 +39,8 @@ work/
 
 | サブフォルダ | 入れるもの | 入れないもの |
 |---|---|---|
-| `reports/` | prep-extractor の `flow-summary.md` / `deploy-context.md` / `flow-dependencies.md`、prep-migration-planner の `migration-plan.md` / `migration-plan.json`、prep-architect の `analysis-*.md` / `decomposition-plan-*.md`、prep-builder/deployer の `publish-manifest.json`、prep-output-comparator の `comparison-report.md` / `pairs.json` | スクリプト、.tfl |
-| `flows/` | prep-builder の `staging/*.tfl` / `intermediate/*.tfl` / `marts/*.tfl` | レポート、試行錯誤の .tfl |
+| `reports/` | tableau-prep-extractor の `flow-summary.md` / `deploy-context.md` / `flow-dependencies.md`、tableau-prep-migration-planner の `migration-plan.md` / `migration-plan.json`、tableau-prep-architect の `analysis-*.md` / `decomposition-plan-*.md`、tableau-prep-builder/deployer の `publish-manifest.json`、tableau-pds-comparator の `comparison-report.md` / `pairs.json` | スクリプト、.tfl |
+| `flows/` | tableau-prep-builder の `staging/*.tfl` / `intermediate/*.tfl` / `marts/*.tfl` | レポート、試行錯誤の .tfl |
 | `scripts/` | **公式の再生成スクリプト** (例: `build_tfls.py` — このセッションの .tfl 群を再ビルドできるもの)。冪等で再実行可能 | 1 回限りの修正試行・実験 |
 | `scratch/` | 試行錯誤・使い捨ての py / メモ (例: `patch_target_path.py`, 検証用 `regression_test_*.py`) | 後段の Skill が依存するスクリプト |
 
@@ -63,7 +63,7 @@ subagent fork の内部時間が見えないとき特に有用 (fork 内の brea
 - 設計判断・思想 → [README.md](../README.md) の `## 設計思想 / 使いどころ` 節
 - 規約・判断基準 → `CLAUDE.md` または該当 Skill の `references/`
 - 実装ロジック → 該当 Skill の `scripts/`
-- 動作確認できた .tfl → prep-deployer で Tableau Cloud へ publish (サーバー側が正本)
+- 動作確認できた .tfl → tableau-prep-deployer で Tableau Cloud へ publish (サーバー側が正本)
 
 ## 注意
 

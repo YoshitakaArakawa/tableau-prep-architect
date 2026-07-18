@@ -1,4 +1,4 @@
-"""Shared Pulse REST helpers for prep-pulse-repointer scripts.
+"""Shared Pulse REST helpers for tableau-pulse-repointer scripts.
 
 All Pulse endpoints live under the versionless path family `/api/-/pulse/...`
 and accept the ordinary REST session token via `X-Tableau-Auth` (the repo's
@@ -14,7 +14,7 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-USER_AGENT = "tableau-prep-architect/prep-pulse-repointer"
+USER_AGENT = "tableau-prep-architect/tableau-pulse-repointer"
 
 # The definitions list silently truncates at the server default (10). 100 keeps
 # round-trips low while staying well under any URL/response limit.

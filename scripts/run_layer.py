@@ -37,7 +37,7 @@ import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-RUN_FLOW_PY = REPO_ROOT / ".claude" / "skills" / "prep-deployer" / "scripts" / "run_flow.py"
+RUN_FLOW_PY = REPO_ROOT / ".claude" / "skills" / "tableau-prep-deployer" / "scripts" / "run_flow.py"
 PUBLISH_MANIFEST_PY = REPO_ROOT / "scripts" / "publish_manifest.py"
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))

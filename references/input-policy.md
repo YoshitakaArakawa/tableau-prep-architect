@@ -17,15 +17,15 @@ dbt の `sources` 概念に相当。
 
 ## 各 Skill での扱い
 
-- **prep-architect / analyze**: 違反（生 DB 直結、ローカルファイル直読）を `Input Compliance` セクションで列挙し、仮想接続化の migration suggestion を出す
-- **prep-architect / decompose**: 違反 Input は新 .tfl の Input 設計で仮想接続経由に置き換える
-- **prep-deployer / publish**: 仮想接続 / Published DS 経由なら embed credentials 不要、生 DB 接続なら `connections` パラメータ拡張が必要
+- **tableau-prep-architect / analyze**: 違反（生 DB 直結、ローカルファイル直読）を `Input Compliance` セクションで列挙し、仮想接続化の migration suggestion を出す
+- **tableau-prep-architect / decompose**: 違反 Input は新 .tfl の Input 設計で仮想接続経由に置き換える
+- **tableau-prep-deployer / publish**: 仮想接続 / Published DS 経由なら embed credentials 不要、生 DB 接続なら `connections` パラメータ拡張が必要
 
 ## stg を Live PDS で表現する場合の束縛層制約
 
-下流 Prep flow (LoadSqlProxy) は PDS のフィールドを **local-name** で束縛する (caption は BI / VizQL 表示専用)。stg を prep-pds-augmenter の Live PDS で表現し、その stg を下流 Prep が読む構成では:
+下流 Prep flow (LoadSqlProxy) は PDS のフィールドを **local-name** で束縛する (caption は BI / VizQL 表示専用)。stg を tableau-pds-augmenter の Live PDS で表現し、その stg を下流 Prep が読む構成では:
 
-- **rename**: vconn source の true rename (local-name 書き換え + `<cols><map>`) でのみ成立。caption-only rename の stg は下流 run が "Unknown field name" で fail する。semantics の詳細は prep-pds-augmenter SKILL.md 参照
+- **rename**: vconn source の true rename (local-name 書き換え + `<cols><map>`) でのみ成立。caption-only rename の stg は下流 run が "Unknown field name" で fail する。semantics の詳細は tableau-pds-augmenter SKILL.md 参照
 - **cast / hide**: 下流 Prep から見た挙動は **未検証**。Prep 消費前提の stg にこれらの op を含める場合は Stop 2 で未検証リスクとして明示し、検証を挟むか実 .tfl 化を検討する
 
 ## スキーマ変更前の下流 incremental 確認
@@ -38,7 +38,7 @@ dbt の `sources` 概念に相当。
 
 理由は build の転写モデルと束縛層の掛け算:
 
-1. prep-builder (`build_from_plan.py`) は下流ノードを **式ごと verbatim 転写し、列参照を書き換えない**。転写式は列を元の内部名で参照するため、上流 PDS が別名 (英語等) を公開すると下流 run が "Unknown field name" で fail する
+1. tableau-prep-builder (`build_from_plan.py`) は下流ノードを **式ごと verbatim 転写し、列参照を書き換えない**。転写式は列を元の内部名で参照するため、上流 PDS が別名 (英語等) を公開すると下流 run が "Unknown field name" で fail する
 2. ある層の英語化は「下流式の全 rewrite」(AddColumn 式 / Filter 式 / LOD の PARTITION・ORDERBY / Join clause / サフィックス派生列) を要求し、決定論的 verbatim 転写というパイプラインの設計意図と両立しない。列参照 rewriter は実装しない (非採用)
 3. 「caption だけ英語・内部名は元のまま」の折衷も **非成立** (検証済み): 上記のとおり下流 Prep は local-name で束縛し caption を見ないため、下流から英語名は見えない
 
