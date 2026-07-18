@@ -128,5 +128,5 @@ MVP では以下を **しない**：
 - 生成した各 .tfl は Tableau Prep Builder で単体動作可能であること
 - 生成 .tfl は **必ず元 .tfl の `maestroMetadata` (推奨: `displaySettings` も) を同梱** する (詳細は [references/build-recipe.md](references/build-recipe.md) Step 2 / 4)
 - cross-layer Input は **LoadSqlProxy + PDS** で組む (LoadHyper は Cloud 上で繋がらない)。`flow_io.add_pds_input` が Server 接続 / dataConnection / node 登録を一括化、Server 接続を dedup (KB 005232681 重複回避)
-- 全 Output は **PublishExtract → 同レイヤ project** で組む (`projectLuid` は plan.json の `ds_projects.<layer>.luid` から取得。充填は gen_plan_skeleton が preflight 後の 0c' 更新済み deploy-context.md を入力に行う)
+- 全 Output は **PublishExtract → 同レイヤ project** で組む (`projectLuid` は plan.json の `ds_projects.<layer>.luid` から取得。充填は gen_plan_skeleton が preflight 後の Phase B 再実行で更新済みの deploy-context.md を入力に行う)
 - 失敗したらその .tfl の生成を中断、ユーザーに報告（自動回避しない）

@@ -16,7 +16,7 @@
 
 | Skill | 役割 | 正典パス | 実行モード |
 |---|---|---|---|
-| prep-extractor | Phase A flow→flow-summary / Phase B Cloud 階層+Input 分類+PDS LUID→deploy-context | [.claude/skills/prep-extractor/SKILL.md](.claude/skills/prep-extractor/SKILL.md) | サブエージェント委譲 (flow-worker-lite) |
+| prep-extractor | Phase A flow→flow-summary / Phase B Cloud 階層+Input 分類+PDS LUID→deploy-context / Phase C flow 依存マップ (複数フロー時) | [.claude/skills/prep-extractor/SKILL.md](.claude/skills/prep-extractor/SKILL.md) | サブエージェント委譲 (flow-worker-lite) |
 | prep-architect | analyze (業務解釈・レイヤ推定) + decompose (分解設計、Stop 2 でユーザー確認) | [.claude/skills/prep-architect/SKILL.md](.claude/skills/prep-architect/SKILL.md) | サブエージェント委譲 (flow-worker) |
 | prep-builder | 設計案から .tfl 群を組み立て (元 .tfl JSON を隔離) | [.claude/skills/prep-builder/SKILL.md](.claude/skills/prep-builder/SKILL.md) | サブエージェント委譲 (flow-worker) |
 | prep-deployer | preflight / publish / run。合意のみで一気通貫、失敗は autonomous-recovery で自律ループ | [.claude/skills/prep-deployer/SKILL.md](.claude/skills/prep-deployer/SKILL.md) | 主会話 |
@@ -69,8 +69,8 @@ fork しない 4 Skill (prep-migration-planner / prep-deployer / prep-pds-augmen
 
 新規 script / reference の配置基準は **「2 つ以上の Skill が使うなら repo 直下、単一 Skill 内で完結するなら Skill 配下」** です:
 
-- repo 直下 `scripts/` / `references/` — 2 つ以上の Skill が共有する共通モジュール・規約 (例: `tableau_auth.py`, `input-policy.md`)
-- `.claude/skills/<skill>/scripts/` / `references/` — その Skill 専用で外から呼ばれないもの
+- repo 直下 `scripts/` / `references/` — 2 つ以上の Skill が共有する共通モジュール・規約 (例: `tableau_auth.py`, `input-policy.md`)、main agent が直接実行する orchestrator、セッション生成スクリプトが import する helper
+- `.claude/skills/<skill>/scripts/` / `references/` — その Skill 専用で外から呼ばれないもの (例外: repo 直下 orchestrator からの subprocess 呼び出しは可)
 
 詳細は [CLAUDE.md](CLAUDE.md#repo-構造) を参照してください。
 

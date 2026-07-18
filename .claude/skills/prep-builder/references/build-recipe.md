@@ -180,7 +180,7 @@ from flow_io import make_publish_extract_node
 layer = "staging"  # or "intermediate" / "marts" (plan.json のレイヤ名)
 out_node = make_publish_extract_node(
     project_name=ctx["ds_projects"][layer]["path"],   # PDS publish 先 (例 "99_Sandbox/.../datasources/stg")
-    project_luid=ctx["ds_projects"][layer]["luid"],   # 同上の LUID (preflight が作成、0c' 更新済み deploy-context.md に記載)
+    project_luid=ctx["ds_projects"][layer]["luid"],   # 同上の LUID (preflight が作成、Phase B 再実行済み deploy-context.md に記載)
     datasource_name=new_flow_name,                    # flow 名 = PDS 名
     server_url=ctx["server"],
     site_url_name=os.environ["SITE_NAME"],
@@ -189,7 +189,7 @@ new_flow["nodes"][out_node["id"]] = out_node
 # 末端ノードの nextNodes に out_node の id を追加するのを忘れない
 ```
 
-`projectLuid` は publish 後の取り違え事故を避けるため必須。通常経路では preflight → Phase B 再実行 (0c') で datasources 配下の layer project LUID が deploy-context.md に埋まり、gen_plan_skeleton がそれを plan.json の `ds_projects.<layer>.luid` に転記する — build_from_plan.py は plan.json から読む。上の手動 fallback では parse_deploy_context で 0c' 済み deploy-context.md を直接読む。
+`projectLuid` は publish 後の取り違え事故を避けるため必須。通常経路では preflight → Phase B 再実行 (migration-workflow step 4) で datasources 配下の layer project LUID が deploy-context.md に埋まり、gen_plan_skeleton がそれを plan.json の `ds_projects.<layer>.luid` に転記する — build_from_plan.py は plan.json から読む。上の手動 fallback では parse_deploy_context で Phase B 再実行済み deploy-context.md を直接読む。
 
 ctx の project 構造 (parse_deploy_context の戻り値):
 

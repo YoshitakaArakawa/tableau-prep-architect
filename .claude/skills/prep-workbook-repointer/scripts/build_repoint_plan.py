@@ -13,7 +13,9 @@ they cannot drift:
 The old->new correspondence key is the OLD output PDS luid
 (manifest.original.outputs[].luid == inventory old PDS luid). If a manifest's
 original output luids are still null (resolve-luids not run), the join falls
-back to matching by PDS name and flags it.
+back to matching by PDS name and flags it. Canonical join-model spec:
+references/publish-manifest-format.md section "repoint join model" (shared
+with prep-pulse-repointer's build_pulse_repoint_plan.py — keep in sync).
 
 Usage:
     python build_repoint_plan.py --inventory <repoint-inventory.json> \

@@ -1,11 +1,9 @@
-# Local development notes — not tracked, but keep the folder + README discoverable
-notes/*
-!notes/README.md
+# Local development notes — fully ignored (contents never tracked)
+notes/
 
 # Work folder — local experiments, analysis outputs, downloaded .tfl files; not tracked
 work/*
 !work/README.md
-notes/*
 
 # OS / Editor
 .DS_Store

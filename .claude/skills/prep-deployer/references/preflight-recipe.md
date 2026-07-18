@@ -42,9 +42,9 @@ if missing_ds:
 
 flows/ と datasources/ を分ける理由 (権限分離・一覧性・publish 先の独立) は [../../../../references/project-hierarchy.md](../../../../references/project-hierarchy.md) を参照。
 
-## 完了後 (caller の責務) — Phase B 再実行 (0c')
+## 完了後 (caller の責務) — Phase B 再実行 (migration-workflow step 4)
 
-preflight で 3 レイヤを作成しても `deploy-context.md` の layer 行 LUID は空のまま — **preflight スクリプトはファイルへ書き戻さない**。caller は preflight 完了後に **prep-extractor Phase B を再実行 (0c')** して `deploy-context.md` を更新し、作成済みプロジェクトの LUID を layer 行に埋めてから publish / 後段の decompose へ進む。この 0c' 済み deploy-context が gen_plan_skeleton (plan.json の `flow_projects` / `ds_projects` 充填) と builder Output の projectLuid 供給元になる。0a → 0c (preflight) → 0c' (Phase B 再実行) → decompose / publish の順が正。
+preflight で 3 レイヤを作成しても `deploy-context.md` の layer 行 LUID は空のまま — **preflight スクリプトはファイルへ書き戻さない**。caller は preflight 完了後に **prep-extractor Phase B を再実行** して `deploy-context.md` を更新し、作成済みプロジェクトの LUID を layer 行に埋めてから publish / 後段の decompose へ進む。この更新済み deploy-context が gen_plan_skeleton (plan.json の `flow_projects` / `ds_projects` 充填) と builder Output の projectLuid 供給元になる。順序は migration-workflow の step 2 (Phase B 初回) → step 4 (preflight → Phase B 再実行) → decompose / publish が正。
 
 ## エラー時の挙動
 

@@ -1,6 +1,6 @@
 ---
 name: prep-pulse-repointer
-description: 移行後、旧 Published Data Source を参照する Tableau Pulse の Metric Definition を新 marts PDS へ差し替える Skill。design (Pulse REST の definitions 全ページ走査 + subscriptions 棚卸しと publish-manifest の突合で対象定義・旧→新 PDS 対応・follower を機械確定し pulse-repoint-runbook.md + pulse-repoint-design.json を生成) / repoint (in-place の datasource 変更は API 不可のため、新 PDS 参照のコピー定義を作成し metric と follower 購読を再作成する自動差し替え。rehearsal コピー → insight 生成の証拠比較 → ユーザー承認 → production の段取りゲート必須) / verify (差し替え後にサーバー実測と突合) の 3 モード。「Pulse の参照置換」「Pulse 定義を新 PDS に差し替え」「Pulse repoint の設計資料を作って」「Pulse repoint を実行して」「Pulse の repoint を検証して」と言われたときに起動。旧定義の削除はしない (連鎖削除があるため人間判断)。サーバー書込は repoint モードの定義/metric/購読作成のみ (design / verify は読み取りのみ)。
+description: 移行後、旧 Published Data Source を参照する Tableau Pulse の Metric Definition を新 marts PDS へ差し替える Skill。design (Pulse REST の definitions 全ページ走査 + subscriptions 棚卸しと publish-manifest の突合で対象定義・旧→新 PDS 対応・follower を機械確定し pulse-repoint-runbook.md + pulse-repoint-design.json を生成) / repoint (in-place の datasource 変更は API 不可のため、新 PDS 参照のコピー定義を作成し metric と follower 購読を再作成する自動差し替え。rehearsal コピー → insight 生成の証拠比較 → ユーザー承認 → production の段取りゲート必須) / verify (差し替え後にサーバー実測と突合) の 3 モード。「Pulse の参照置換」「Pulse 定義を新 PDS に差し替え」「Pulse repoint の設計資料を作って」「Pulse repoint を実行して」「Pulse の repoint を検証して」と言われたときに起動。旧定義の削除はしない (連鎖削除があるため人間判断)。サーバー書込は repoint モードの定義/metric/購読作成のみ (design / verify は読み取りのみ)。移行セッション冒頭の intake・goal ゲート・起動順序は references/migration-workflow.md が正典（本 Skill 単体で移行セッションを始めない）。
 context: fork
 agent: general-purpose
 allowed-tools: Read Write Bash(python *) Glob Grep
@@ -83,10 +83,11 @@ python ${CLAUDE_SKILL_DIR}/scripts/build_pulse_repoint_plan.py \
   --out-dir <output_dir>
 ```
 
-ローカル join のみ (サーバーアクセスなし)。旧 PDS luid ↔ manifest `original.outputs[].luid` を
-主キーに `source_original_output_name` 経由で新 PDS を確定し、**pulse-repoint-design.json** と
-**pulse-repoint-runbook.md** を 1 パスで生成する (両者は必ず一致)。対応先が確定できない旧 PDS は
-`unmapped_old_pds` に落とす。
+ローカル join のみ (サーバーアクセスなし)。manifest との join で旧→新 PDS を機械確定し、
+**pulse-repoint-design.json** と **pulse-repoint-runbook.md** を 1 パスで生成する (両者は必ず一致)。
+join モデル (luid 主キー / name fallback / `unmapped_old_pds`) の正典は
+[publish-manifest-format.md §repoint join model](../../../references/publish-manifest-format.md)
+(prep-workbook-repointer と共通)。
 
 runbook は **go/no-go 判断書** — ユーザーがこの 1 枚で影響全量を確認して repoint を承認できる
 ことが目的。impact 表は **follower 有無で 2 階層** に分ける: follower あり = 移行対象 /
