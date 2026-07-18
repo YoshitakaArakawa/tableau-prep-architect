@@ -5,7 +5,7 @@ note: target (= stg/int/marts の直上) と pending segments モデル、idempo
 
 # project-hierarchy
 
-Tableau Server/Cloud 上で `prep-deployer` が publish 先として扱うプロジェクト階層の規約。
+Tableau Server/Cloud 上で `tableau-prep-deployer` が publish 先として扱うプロジェクト階層の規約。
 
 ## モデル: 最下層固定 + 上位柔軟
 
@@ -40,7 +40,7 @@ publish 先:
 
 ## preflight の挙動
 
-`prep-deployer` の preflight が pending segments と dbt 3 レイヤを idempotent に作成する。アルゴリズム・承認方針・エラー時挙動は [prep-deployer/references/preflight-recipe.md](../.claude/skills/prep-deployer/references/preflight-recipe.md) に集約 (SSOT)。本ファイルはモデル定義のみを扱う。
+`tableau-prep-deployer` の preflight が pending segments と dbt 3 レイヤを idempotent に作成する。アルゴリズム・承認方針・エラー時挙動は [tableau-prep-deployer/references/preflight-recipe.md](../.claude/skills/tableau-prep-deployer/references/preflight-recipe.md) に集約 (SSOT)。本ファイルはモデル定義のみを扱う。
 
 ## スクリプト
 
@@ -56,7 +56,7 @@ python create_project.py --name "new-top-level-folder"
 ```
 
 - 既存なら `[skip]`、新規なら `[created]` をログ
-- 常に非対話 (session intake の target path 指定が合意、[autonomous-recovery.md §実行ポリシー](../.claude/skills/prep-deployer/references/autonomous-recovery.md))
+- 常に非対話 (session intake の target path 指定が合意、[autonomous-recovery.md §実行ポリシー](../.claude/skills/tableau-prep-deployer/references/autonomous-recovery.md))
 - 親未指定 (= top-level 作成) の場合は stderr に WARNING を出力 (governance 上の事後監査用、処理は止めない)
 
 ### `create_projects.py`(dbt 3 レイヤをまとめて)
@@ -80,7 +80,7 @@ python create_projects.py --parent-id <flows-luid> --layers marts
 2. 名前が `stg` / `intermediate` / `marts` のいずれかに一致するものは `[skip]`
 3. 存在しないものだけ `POST /projects` で作成
 
-`flows/` / `datasources/` 自体が未作成の場合は、本スクリプトの前に `create_project.py` で先に作る (preflight のアルゴリズムは [preflight-recipe.md](../.claude/skills/prep-deployer/references/preflight-recipe.md))。target 自体も同様に `create_project.py` で先に作る。
+`flows/` / `datasources/` 自体が未作成の場合は、本スクリプトの前に `create_project.py` で先に作る (preflight のアルゴリズムは [preflight-recipe.md](../.claude/skills/tableau-prep-deployer/references/preflight-recipe.md))。target 自体も同様に `create_project.py` で先に作る。
 
 ## 推奨権限テンプレ
 
@@ -130,7 +130,7 @@ WARNING: creating top-level project '<name>' — org governance implications. Au
   LUID: ...
 ```
 
-session intake ([migration-workflow](migration-workflow.md) step 0 Q4) で top-level を含む target path が指示されていれば、処理は止めずに WARNING を残して進む。後段で governance 上の事後監査ができるよう stderr に出すのが目的 ([autonomous-recovery.md §実行ポリシー](../.claude/skills/prep-deployer/references/autonomous-recovery.md))。
+session intake ([migration-workflow](migration-workflow.md) step 0 Q4) で top-level を含む target path が指示されていれば、処理は止めずに WARNING を残して進む。後段で governance 上の事後監査ができるよう stderr に出すのが目的 ([autonomous-recovery.md §実行ポリシー](../.claude/skills/tableau-prep-deployer/references/autonomous-recovery.md))。
 
 ## ambiguity（同名複数）
 

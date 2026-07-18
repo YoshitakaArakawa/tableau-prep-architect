@@ -1,4 +1,4 @@
 tableauserverclient>=0.30
 python-dotenv>=1.0
-# prep-pds-backfiller only: .hyper extract surgery for history backfill
+# tableau-pds-backfiller only: .hyper extract surgery for history backfill
 tableauhyperapi>=0.0.14000

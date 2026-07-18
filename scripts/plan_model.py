@@ -2,10 +2,10 @@
 
 Three consumers share this module so a plan means the same thing everywhere:
 
-  - prep-architect  `gen_plan_skeleton.py` (emit mechanical skeleton) and
+  - tableau-prep-architect  `gen_plan_skeleton.py` (emit mechanical skeleton) and
                     `render_plan_md.py`   (render Stop-2 review markdown +
                                            validate the plan before review)
-  - prep-builder    `build_from_plan.py`  (materialize .tfl / augmenter specs)
+  - tableau-prep-builder    `build_from_plan.py`  (materialize .tfl / augmenter specs)
 
 Responsibilities:
   - load + structural validation of plan.json (`load_plan`)

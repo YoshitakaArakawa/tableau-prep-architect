@@ -6,11 +6,11 @@ that aggregates: original flow info, decomposed flow list, output mapping,
 publish/run status, and LUIDs as they become known.
 
 Lifecycle:
-  - prep-builder runs `init`
-  - prep-deployer runs `update-publish` after each successful publish,
+  - tableau-prep-builder runs `init`
+  - tableau-prep-deployer runs `update-publish` after each successful publish,
     `update-run` after each run, and `resolve-luids` once at the end of the
     chain to fill in original.flow_luid + all PDS LUIDs from Metadata API
-  - prep-output-comparator reads it (no writes)
+  - tableau-pds-comparator reads it (no writes)
 
 See references/publish-manifest-format.md for the full schema.
 

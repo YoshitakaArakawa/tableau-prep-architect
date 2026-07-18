@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from pulse_api import list_definitions, list_subscriptions  # noqa: E402
 from tableau_auth import signed_in_server  # noqa: E402
 
-# Lineage direction confirmed reliable in this repo (see prep-workbook-repointer
+# Lineage direction confirmed reliable in this repo (see tableau-workbook-repointer
 # references/lineage-model.md); the reverse direction is deliberately not used.
 LINEAGE_QUERY = """
 {

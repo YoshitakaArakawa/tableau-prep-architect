@@ -1,6 +1,6 @@
-# flow-worker — fork 系 Skill (prep-extractor / prep-architect / prep-builder /
-# prep-output-comparator / prep-schedule-designer / prep-workbook-repointer /
-# prep-pulse-repointer) を
+# flow-worker — fork 系 Skill (tableau-prep-extractor / tableau-prep-architect / tableau-prep-builder /
+# tableau-pds-comparator / tableau-schedule-designer / tableau-workbook-repointer /
+# tableau-pulse-repointer) を
 # 隔離実行するためのサブエージェント。Claude Code の `context: fork` の写像。
 # trusted プロジェクトでのみ有効 (.codex/config.toml の trust ゲート参照)。
 
@@ -33,8 +33,8 @@ developer_instructions = """
 # 失敗・認証
 - スクリプトや MCP 呼び出しが失敗したら、その時点で停止し呼び出し元にエラーを返す。
   後工程 Skill は自律リトライしない (リトライ / 入力修正 / 人間作業の判断は
-  呼び出し元の責務)。サーバー書込を持つモード (prep-workbook-repointer の repoint =
-  WB republish / prep-pulse-repointer の repoint = Pulse 定義・購読作成) も同じで、
+  呼び出し元の責務)。サーバー書込を持つモード (tableau-workbook-repointer の repoint =
+  WB republish / tableau-pulse-repointer の repoint = Pulse 定義・購読作成) も同じで、
   失敗した publish を fork 内で自律リトライしない。
 - 認証失効 (401 / token 切れ) は fork 内で放置してタイムアウトさせず、呼び出し元に
   返す。ブラウザ再サインインはユーザー在席が要るため主会話側で捌く。

@@ -132,8 +132,8 @@ def inspect_input_node(flow: dict[str, Any], node_id: str) -> dict[str, Any]:
       - "extract"    : LoadHyper or similar local-extract loader
       - "unknown"    : nodeType not recognized or node not present / not input
 
-    Used by prep-builder to dispatch stg materialization: vconn -> generate a
-    prep-pds-augmenter spec; pds/direct_db/extract -> currently unsupported for
+    Used by tableau-prep-builder to dispatch stg materialization: vconn -> generate a
+    tableau-pds-augmenter spec; pds/direct_db/extract -> currently unsupported for
     the live-PDS path (build the .tfl as before, or skip with warning per
     layer-responsibilities.md).
 
@@ -202,7 +202,7 @@ def inspect_input_node(flow: dict[str, Any], node_id: str) -> dict[str, Any]:
 
 
 def vconn_input_to_augmenter_columns(fields: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Translate an Input node's `fields[]` into prep-pds-augmenter
+    """Translate an Input node's `fields[]` into tableau-pds-augmenter
     `source.columns[]` entries.
 
     Input field shape (from flow.json):
@@ -289,7 +289,7 @@ def _default_placeholder_dbname(datasource_name: str) -> str:
     both LoadSqlProxy `connectionAttributes` and dataConnection
     `modifiedConnectionAttributes`. An obviously-fake string is accepted at
     publish time (errorCode=280003 only fires when the field is absent), but
-    flow run will fail until prep-deployer's `discover_pds_dbname.py` patches
+    flow run will fail until tableau-prep-deployer's `discover_pds_dbname.py` patches
     it with the real Cloud-assigned name.
     """
     return f"{datasource_name}_placeholder"
@@ -308,7 +308,7 @@ def register_pds_data_connection(
     `dbname` is the physical Hyper name Tableau Cloud assigns when the PDS is
     first published (`<datasource_name>_<17-digit-suffix>`). Pass `None` at
     build time if the upstream PDS has not been published yet — a placeholder
-    is inserted so publish succeeds; resolve and patch via prep-deployer's
+    is inserted so publish succeeds; resolve and patch via tableau-prep-deployer's
     `discover_pds_dbname.py` after the upstream run completes.
 
     Returns the dataConnection id (uuid). Each call creates a fresh entry —
@@ -406,7 +406,7 @@ def make_publish_extract_node(
 
     `serverUrl` is composed as `<server_url>/#/site/<site_url_name>` to match the
     canonical shape Prep Builder emits. `project_luid` is required so the publish
-    target is unambiguous; obtain it from prep-extractor's deploy-context.md.
+    target is unambiguous; obtain it from tableau-prep-extractor's deploy-context.md.
     """
     nid = node_id or str(uuid.uuid4())
     site_part = f"/#/site/{site_url_name}" if site_url_name else ""
@@ -1002,7 +1002,7 @@ def copy_source_node(
     "Default" causes silent run-time failures like "Union step is missing a
     connection" or "missing field on left side in join clause".
 
-    Use this in prep-builder Step 3a when extracting included nodes from the
+    Use this in tableau-prep-builder Step 3a when extracting included nodes from the
     source .tfl into a new .tfl.
     """
     src = source_flow.get("nodes", {}).get(node_id)
